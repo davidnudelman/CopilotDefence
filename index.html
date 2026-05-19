@@ -24,10 +24,23 @@
     <main>
       <div id="board-wrap">
         <canvas id="board" width="720" height="432"></canvas>
-        <button id="missions-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
-          <span class="btn-label">Missions</span>
-          <span id="missions-count" class="chip">0</span>
+        <button id="golem-btn" type="button" hidden>
+          <span class="btn-label">🗿 Golem</span>
+          <span id="golem-timer" class="chip">ready</span>
         </button>
+        <div class="board-chips">
+          <button id="missions-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+            <span class="btn-label">Missions</span>
+            <span id="missions-count" class="chip">0</span>
+          </button>
+          <button id="recipes-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+            <span class="btn-label">Recipes</span>
+          </button>
+          <button id="dungeon-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+            <span class="btn-label">Dungeon</span>
+            <span id="dungeon-count" class="chip empty">0</span>
+          </button>
+        </div>
         <div id="missions-popup" hidden role="dialog" aria-label="Missions">
           <div class="popup-card">
             <header>
@@ -35,6 +48,24 @@
               <button id="missions-close" type="button" aria-label="Close">×</button>
             </header>
             <ul id="mission-list"></ul>
+          </div>
+        </div>
+        <div id="recipes-popup" hidden role="dialog" aria-label="Mythic Recipes">
+          <div class="popup-card">
+            <header>
+              <h3>Mythic Recipes</h3>
+              <button id="recipes-close" type="button" aria-label="Close">×</button>
+            </header>
+            <div id="recipes-body"></div>
+          </div>
+        </div>
+        <div id="dungeon-popup" hidden role="dialog" aria-label="Dungeon">
+          <div class="popup-card">
+            <header>
+              <h3>Dungeon</h3>
+              <button id="dungeon-close" type="button" aria-label="Close">×</button>
+            </header>
+            <div id="dungeon-body"></div>
           </div>
         </div>
         <div id="board-hud">
@@ -58,6 +89,7 @@
           <div id="unit-actions" hidden>
             <button id="sell-btn">Sell</button>
             <button id="merge-btn" hidden>Merge ×3</button>
+            <button id="dungeon-btn" hidden>Dungeon</button>
           </div>
         </section>
 
