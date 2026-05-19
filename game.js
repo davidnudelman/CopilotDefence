@@ -33,7 +33,7 @@ const WAYPOINTS = [
   { col: 10, row: 2 },
 ];
 
-const RARITY_ORDER = ['Common', 'Rare', 'Epic', 'Legendary', 'Mythic'];
+const RARITY_ORDER = ['Common', 'Rare', 'Epic', 'Legendary', 'Mythic', 'Immortal'];
 
 const RARITY_COLORS = {
   Common:    '#b6bac3',
@@ -41,7 +41,15 @@ const RARITY_COLORS = {
   Epic:      '#4f8bf0',
   Legendary: '#b06bf0',
   Mythic:    '#f49b3a',
+  Immortal:  '#ffffff',
 };
+
+const DIFFICULTIES = {
+  normal: { id: 'normal', name: 'Normal', enemyHp: 1.00, bossHp: 1.00, def: 1.0, reward: 1.00, stunMult: 1.00, color: '#5fd870', desc: 'Entry-level. Forgiving scaling.' },
+  hard:   { id: 'hard',   name: 'Hard',   enemyHp: 1.60, bossHp: 2.00, def: 1.3, reward: 1.25, stunMult: 0.50, color: '#f5c542', desc: 'Sharper HP scaling. Stuns half as long.' },
+  hell:   { id: 'hell',   name: 'Hell',   enemyHp: 3.00, bossHp: 4.50, def: 1.7, reward: 1.60, stunMult: 0.30, color: '#e25555', desc: 'Brutal HP walls. Pre-planned builds only.' },
+};
+const DIFFICULTY_ORDER = ['normal', 'hard', 'hell'];
 
 /* === Unit catalogue ===
  * dmg     : base damage per hit
@@ -65,6 +73,8 @@ const UNITS = {
   refactor:  { id: 'refactor',  name: 'Refactor Master',  rarity: 'Mythic',    glyph: '🧹', dmg: 80,  range: 2.6, aps: 0.9, type: 'magic',    percentHP: 0.045 },
   copilot:   { id: 'copilot',   name: 'Copilot Pro',      rarity: 'Mythic',    glyph: '🚀', dmg: 110, range: 3.4, aps: 1.0, type: 'magic',    aoe: 1.0 },
   banditlord:{ id: 'banditlord',name: 'Bandit Lord',      rarity: 'Mythic',    glyph: '💰', dmg: 95,  range: 2.8, aps: 1.4, type: 'physical', loot: 10, dungeonDps: 38 },
+  haley:     { id: 'haley',     name: 'Haley',            rarity: 'Immortal',  glyph: '🪄', dmg: 200, range: 3.0, aps: 1.5, type: 'physical', variable: true,           dungeonDps: 80 },
+  ato:       { id: 'ato',       name: 'Immortal Ato',     rarity: 'Immortal',  glyph: '🦋', dmg: 170, range: 3.4, aps: 1.2, type: 'magic',    variable: true, aoe: 1.2, dungeonDps: 70 },
 };
 
 const POOLS = {
@@ -73,7 +83,10 @@ const POOLS = {
   Epic:      ['senior', 'architect'],
   Legendary: ['techlead', 'aipair', 'linter', 'bandit'],
   Mythic:    ['tenx', 'refactor', 'copilot', 'banditlord'],
+  Immortal:  ['haley', 'ato'],
 };
+
+const IMMORTAL_ROULETTE_COST = 8;
 
 /* Deterministic Legendary → Mythic recipes (3 of same Legendary). */
 const MYTHIC_RECIPES = {
@@ -125,6 +138,9 @@ const ACHIEVEMENTS = [
   { id: 'kill1000',    title: 'Bug Bash',         desc: 'Kill 1,000 enemies (cumulative).' },
   { id: 'sbMax',       title: 'Vault Engineer',   desc: 'Upgrade Safe Box to Lv 5.' },
   { id: 'mgMax',       title: 'Cashflow Cannon',  desc: 'Upgrade Money Gun to Lv 5.' },
+  { id: 'immortal',    title: 'Beyond Mythic',    desc: 'Summon an Immortal guardian.' },
+  { id: 'hardClear',   title: 'Hard Mode Clear',  desc: 'Reach wave 30 on Hard.' },
+  { id: 'hellRun',     title: 'Welcome to Hell',  desc: 'Reach wave 10 on Hell.' },
 ];
 
 function loadSave() {
@@ -141,6 +157,7 @@ function saveProgress() {
       artifacts: game.artifacts,
       achievements: game.achievements,
       stats: game.stats,
+      difficulty: game.difficulty,
     }));
   } catch {}
 }
@@ -214,6 +231,9 @@ const game = {
   artifacts: { sb: 0, mg: 0 },
   achievements: {},
   stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0 },
+  difficulty: 'normal',
+  particles: [],
+  shake: { time: 0, intensity: 0 },
 };
 
 const ui = {};
@@ -276,17 +296,20 @@ function spawnDelay(kind) {
 }
 
 function makeEnemy(kind, wave) {
+  const diff = DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal;
   const tuning = {
     normal: { hp: 7  * Math.pow(1.062, wave - 1), speed: 82, size: 16, def: Math.floor(wave * 0.35), magicRes: 0, color: '#e25555', glyph: '🐛' },
     elite:  { hp: 26 * Math.pow(1.072, wave - 1), speed: 66, size: 20, def: Math.floor(wave * 0.55), magicRes: 0, color: '#7a55c4', glyph: '💧' },
     boss:   { hp: 75 * Math.pow(1.092, wave - 1), speed: 38, size: 28, def: Math.floor(wave * 0.65), magicRes: wave >= 50 ? 0.3 : 0, color: '#1a1a1a', glyph: '💀' },
   }[kind];
+  const hpMult = kind === 'boss' ? diff.bossHp : diff.enemyHp;
+  const hp = tuning.hp * hpMult;
   const e = {
     kind,
-    maxHp: tuning.hp, hp: tuning.hp,
+    maxHp: hp, hp,
     baseSpeed: tuning.speed,
     size: tuning.size,
-    def: tuning.def,
+    def: Math.floor(tuning.def * diff.def),
     magicRes: tuning.magicRes,
     color: tuning.color,
     glyph: tuning.glyph,
@@ -316,6 +339,7 @@ function updateWaveSpawning(dt) {
   while (game.spawnTimer <= 0 && game.spawnQueue.length > 0) {
     const next = game.spawnQueue.shift();
     game.enemies.push(makeEnemy(next.kind, game.wave));
+    if (next.kind === 'boss') triggerShake(6, 0.5);
     game.spawnTimer += spawnDelay(next.kind);
   }
 }
@@ -334,6 +358,8 @@ function checkWaveComplete() {
     if (game.wave === 10) { completeMission('reachWave10'); unlock('wave10'); }
     if (game.wave === 30) { completeMission('reachWave30'); unlock('wave30'); }
     if (game.wave === 50) unlock('wave50');
+    if (game.wave === 10 && game.difficulty === 'hell') unlock('hellRun');
+    if (game.wave === 30 && game.difficulty === 'hard') unlock('hardClear');
     if (game.wave >= MAX_WAVES) { endGame(true); return; }
     game.wave++;
     saveProgress();
@@ -362,6 +388,7 @@ function updateEnemies(dt) {
       e.escaped = true;
       const dmg = e.kind === 'boss' ? 5 : e.kind === 'elite' ? 2 : 1;
       game.hp -= dmg;
+      triggerShake(4 + dmg, 0.25);
       log(`Escape! ${e.glyph} reached the base (-${dmg} HP)`, 'danger');
       if (game.hp <= 0) { game.hp = 0; endGame(false); }
     }
@@ -381,21 +408,27 @@ function damageEnemy(enemy, dmg, type, killer) {
   spawnPopup(enemy.x, enemy.y - enemy.size, Math.round(actual).toString(), type === 'magic' ? '#9bd9ff' : '#ffe5a3');
   if (enemy.hp <= 0 && !enemy.dead) {
     enemy.dead = true;
+    const burstColor = enemy.kind === 'boss' ? '#ff7e7e' : enemy.kind === 'golem' ? '#d2a76a' : enemy.color;
+    const burstCount = enemy.kind === 'boss' || enemy.kind === 'golem' ? 26 : enemy.kind === 'elite' ? 14 : 8;
+    spawnParticleBurst(enemy.x, enemy.y, burstColor, burstCount);
+    if (enemy.kind === 'boss')  triggerShake(8, 0.4);
+    if (enemy.kind === 'golem') triggerShake(6, 0.3);
     onEnemyKilled(enemy, killer);
   }
 }
 
 function onEnemyKilled(enemy, killer) {
-  if (enemy.kind === 'normal') game.gold += 2 + Math.floor(game.wave * 0.25);
-  else if (enemy.kind === 'elite') game.gold += 9 + Math.floor(game.wave * 0.5);
+  const rewardMult = (DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal).reward;
+  if (enemy.kind === 'normal') game.gold += (2 + Math.floor(game.wave * 0.25)) * rewardMult;
+  else if (enemy.kind === 'elite') game.gold += (9 + Math.floor(game.wave * 0.5)) * rewardMult;
   else if (enemy.kind === 'boss') {
-    const reward = 30 + game.wave * 2;
+    const reward = Math.round((30 + game.wave * 2) * rewardMult);
     game.gold += reward;
     game.stones += 2;
     log(`Boss defeated (+${reward}g, +2 stones)`, 'gold');
     completeMission('beatBoss');
   } else if (enemy.kind === 'golem') {
-    const reward = 60 + game.wave * 3;
+    const reward = Math.round((60 + game.wave * 3) * rewardMult);
     game.gold += reward;
     game.stones += 2;
     game.golem.active = false;
@@ -426,6 +459,7 @@ function unitDamage(unit) {
   else if (d.rarity === 'Epic')                     dmg *= 1 + 0.20 * game.upgrades.Epic;
   else                                              dmg *= 1 + 0.25 * game.upgrades.Mythic;
   dmg *= ARTIFACTS.mg.multAt(game.artifacts.mg, game.gold);
+  if (d.variable) dmg *= 0.5 + Math.random();
   return dmg;
 }
 
@@ -459,8 +493,9 @@ function updateUnits(dt) {
       }
     }
     if (d.stun && Math.random() < d.stun.chance) {
+      const stunMult = (DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal).stunMult;
       if (target.stunTimer <= 0) noteStun();
-      target.stunTimer = Math.max(target.stunTimer, d.stun.duration);
+      target.stunTimer = Math.max(target.stunTimer, d.stun.duration * stunMult);
     }
     if (d.slow) {
       target.slowAmount = Math.max(target.slowAmount, d.slow.amount);
@@ -500,6 +535,7 @@ function spawnUnit(id, col, row) {
   if (d.rarity === 'Epic')      completeMission('firstEpic');
   if (d.rarity === 'Legendary') completeMission('firstLegendary');
   if (d.rarity === 'Mythic')    completeMission('firstMythic');
+  if (d.rarity === 'Immortal')  unlock('immortal');
   if (id === 'banditlord')      unlock('banditLord');
   const commons = game.units.filter(x => UNITS[x.id].rarity === 'Common').length;
   if (commons >= 5) completeMission('fiveCommons');
@@ -526,6 +562,25 @@ function roulette() {
   game.stones -= 1;
   const id = POOLS.Epic[Math.floor(Math.random() * POOLS.Epic.length)];
   spawnUnit(id, cell[0], cell[1]);
+  updateUI();
+}
+
+function immortalUnlocked() {
+  return game.units.some(u => UNITS[u.id].rarity === 'Mythic') ||
+         game.dungeon.units.some(u => UNITS[u.id].rarity === 'Mythic') ||
+         !!game.achievements.immortal;
+}
+
+function immortalRoulette() {
+  if (!immortalUnlocked()) { log('Acquire a Mythic to unlock the Immortal Pull', 'danger'); return; }
+  if (game.stones < IMMORTAL_ROULETTE_COST) return;
+  const cell = findEmptyCell();
+  if (!cell) { log('Board is full', 'danger'); return; }
+  game.stones -= IMMORTAL_ROULETTE_COST;
+  const id = POOLS.Immortal[Math.floor(Math.random() * POOLS.Immortal.length)];
+  spawnUnit(id, cell[0], cell[1]);
+  triggerShake(6, 0.35);
+  spawnParticleBurst(cellCenter(cell[0], cell[1]).x, cellCenter(cell[0], cell[1]).y, '#ffffff', 22);
   updateUI();
 }
 
@@ -577,6 +632,7 @@ const GOLEM_CELL = { col: 9, row: 4 };
 
 function startGolem() {
   if (!game.golem.ready || game.golem.active || game.gameOver) return;
+  triggerShake(7, 0.35);
   const wave = game.wave;
   const hp = 110 * Math.pow(1.08, wave - 1);
   const c = cellCenter(GOLEM_CELL.col, GOLEM_CELL.row);
@@ -793,10 +849,40 @@ function updateEffects(dt) {
   game.beams = game.beams.filter(b => b.life > 0);
   for (const p of game.popups) { p.life -= dt; p.y -= 22 * dt; }
   game.popups = game.popups.filter(p => p.life > 0);
+  for (const p of game.particles) {
+    p.life -= dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 240 * dt;
+  }
+  game.particles = game.particles.filter(p => p.life > 0);
+  if (game.shake.time > 0) game.shake.time = Math.max(0, game.shake.time - dt);
 }
 
 function spawnPopup(x, y, text, color) {
   game.popups.push({ x, y, text, color, life: 0.65 });
+}
+
+function spawnParticleBurst(x, y, color, count = 8) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 45 + Math.random() * 110;
+    const life = 0.45 + Math.random() * 0.35;
+    game.particles.push({
+      x, y, color,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 30,
+      life, maxLife: life,
+      size: 1.5 + Math.random() * 2,
+    });
+  }
+}
+
+function triggerShake(intensity, time) {
+  if (game.shake.intensity * (game.shake.time || 0) < intensity * time) {
+    game.shake.intensity = intensity;
+    game.shake.time = time;
+  }
 }
 
 /* === Rendering === */
@@ -905,7 +991,7 @@ function drawUnitAt(ctx, u, x, y, ghost = false) {
   }
   // ring
   ctx.strokeStyle = color;
-  ctx.lineWidth = d.rarity === 'Mythic' ? 4 : 3;
+  ctx.lineWidth = (d.rarity === 'Mythic' || d.rarity === 'Immortal') ? 4 : 3;
   ctx.beginPath();
   ctx.arc(x, y, 24, 0, Math.PI * 2);
   ctx.stroke();
@@ -915,6 +1001,18 @@ function drawUnitAt(ctx, u, x, y, ghost = false) {
     ctx.beginPath();
     ctx.arc(x, y, 28, 0, Math.PI * 2);
     ctx.stroke();
+  } else if (d.rarity === 'Immortal') {
+    // Rainbow shimmer ring — three offset arcs animated by time.
+    const t = performance.now() / 600;
+    for (let i = 0; i < 6; i++) {
+      const a0 = t + i * Math.PI / 3;
+      const a1 = a0 + Math.PI / 5;
+      ctx.strokeStyle = `hsl(${(t * 60 + i * 60) % 360} 90% 65%)`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y, 30, a0, a1);
+      ctx.stroke();
+    }
   }
   // glyph
   ctx.font = `24px ${EMOJI_FONT}`;
@@ -994,6 +1092,18 @@ function drawBeams(ctx) {
   }
 }
 
+function drawParticles(ctx) {
+  for (const p of game.particles) {
+    const alpha = Math.max(0, p.life / p.maxLife);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawPopups(ctx) {
   ctx.textAlign = 'center';
   ctx.font = 'bold 12px system-ui, sans-serif';
@@ -1025,6 +1135,14 @@ function drawHoverCell(ctx) {
 function draw() {
   const ctx = game.ctx;
   ctx.clearRect(0, 0, BOARD_W, BOARD_H);
+  let ox = 0, oy = 0;
+  if (game.shake.time > 0) {
+    const f = Math.min(1, game.shake.time / 0.3);
+    ox = (Math.random() - 0.5) * game.shake.intensity * f;
+    oy = (Math.random() - 0.5) * game.shake.intensity * f;
+  }
+  ctx.save();
+  if (ox || oy) ctx.translate(ox, oy);
   drawGrid(ctx);
   drawPath(ctx);
   drawHoverCell(ctx);
@@ -1032,7 +1150,9 @@ function draw() {
   drawUnits(ctx);
   drawEnemies(ctx);
   drawBeams(ctx);
+  drawParticles(ctx);
   drawPopups(ctx);
+  ctx.restore();
 }
 
 /* === Game loop === */
@@ -1175,6 +1295,13 @@ function setupUI() {
   ui.achievementsClose  = document.getElementById('achievements-close');
   ui.achievementsBody   = document.getElementById('achievements-body');
   ui.achievementsCount  = document.getElementById('achievements-count');
+  ui.difficultyToggle   = document.getElementById('difficulty-toggle');
+  ui.difficultyPopup    = document.getElementById('difficulty-popup');
+  ui.difficultyClose    = document.getElementById('difficulty-close');
+  ui.difficultyBody     = document.getElementById('difficulty-body');
+  ui.difficultyLabel    = document.getElementById('difficulty-label');
+  ui.immortalBtn        = document.getElementById('immortal-btn');
+  ui.immortalCost       = document.getElementById('immortal-cost');
   ui.golemBtn       = document.getElementById('golem-btn');
   ui.golemTimer     = document.getElementById('golem-timer');
   ui.dungeonBtn     = document.getElementById('dungeon-btn');
@@ -1187,6 +1314,7 @@ function setupUI() {
 
   ui.summonBtn.addEventListener('click', summon);
   ui.rouletteBtn.addEventListener('click', roulette);
+  ui.immortalBtn.addEventListener('click', immortalRoulette);
   ui.upgCommon.addEventListener('click', () => upgrade('Common'));
   ui.upgEpic.addEventListener('click',   () => upgrade('Epic'));
   ui.upgMythic.addEventListener('click', () => upgrade('Mythic'));
@@ -1197,7 +1325,7 @@ function setupUI() {
   ui.dungeonBtn.addEventListener('click', (e) => { e.stopPropagation(); sendToDungeon(); });
   ui.restart.addEventListener('click', restart);
 
-  const POPUP_KEYS = ['missions', 'recipes', 'dungeon', 'artifacts', 'achievements'];
+  const POPUP_KEYS = ['missions', 'recipes', 'dungeon', 'artifacts', 'achievements', 'difficulty'];
   for (const key of POPUP_KEYS) {
     ui[`${key}Toggle`].addEventListener('click', () => togglePopup(key));
     ui[`${key}Close`].addEventListener('click', () => setPopup(key, false));
@@ -1243,6 +1371,18 @@ function updateUI() {
   ui.upgMythicCost.textContent = upgradeCostFor('Mythic');
   ui.summonBtn.disabled   = game.gold < game.summonCost || game.gameOver;
   ui.rouletteBtn.disabled = game.stones < 1             || game.gameOver;
+  if (ui.immortalBtn) {
+    ui.immortalCost.textContent = IMMORTAL_ROULETTE_COST;
+    const unlocked = immortalUnlocked();
+    ui.immortalBtn.disabled = game.gameOver || game.stones < IMMORTAL_ROULETTE_COST || !unlocked;
+    ui.immortalBtn.classList.toggle('locked', !unlocked);
+    ui.immortalBtn.title = unlocked ? '' : 'Acquire a Mythic guardian to unlock';
+  }
+  if (ui.difficultyLabel) {
+    const d = DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal;
+    ui.difficultyLabel.textContent = d.name;
+    ui.difficultyToggle.style.setProperty('--diff-color', d.color);
+  }
   ui.upgCommon.disabled   = game.gold < upgradeCostFor('Common') || game.gameOver;
   ui.upgEpic.disabled     = game.gold < upgradeCostFor('Epic')   || game.gameOver;
   ui.upgMythic.disabled   = game.gold < upgradeCostFor('Mythic') || game.gameOver;
@@ -1327,6 +1467,7 @@ function setPopup(key, open) {
     if (key === 'artifacts')    renderArtifacts();
     if (key === 'achievements') renderAchievements();
     if (key === 'dungeon')      renderDungeon();
+    if (key === 'difficulty')   renderDifficulty();
   }
 }
 
@@ -1432,6 +1573,38 @@ function renderArtifacts() {
   });
 }
 
+function renderDifficulty() {
+  const current = game.difficulty;
+  const rows = DIFFICULTY_ORDER.map(id => {
+    const d = DIFFICULTIES[id];
+    const active = id === current;
+    return `<li class="${active ? 'active' : ''}">
+      <button class="difficulty-row" data-difficulty="${id}" style="--diff-color:${d.color}" ${active ? 'aria-pressed="true"' : ''}>
+        <div class="diff-meta">
+          <div class="diff-name">${d.name}${active ? ' · current' : ''}</div>
+          <div class="diff-desc">${d.desc}</div>
+          <div class="diff-stats">HP ×${d.enemyHp.toFixed(1)} · Boss ×${d.bossHp.toFixed(1)} · Reward ×${d.reward.toFixed(2)} · Stun ×${d.stunMult.toFixed(1)}</div>
+        </div>
+      </button>
+    </li>`;
+  }).join('');
+  ui.difficultyBody.innerHTML = `
+    <p class="hint">Picking a difficulty restarts the run. Persisted across sessions.</p>
+    <ul class="difficulty-list">${rows}</ul>
+  `;
+  ui.difficultyBody.querySelectorAll('[data-difficulty]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.difficulty;
+      if (id === game.difficulty) return;
+      game.difficulty = id;
+      saveProgress();
+      restart();
+      setPopup('difficulty', false);
+    });
+  });
+}
+
 function renderAchievements() {
   const got = Object.keys(game.achievements).filter(k => game.achievements[k]).length;
   const total = ACHIEVEMENTS.length;
@@ -1513,10 +1686,13 @@ function restart() {
   game.missions = makeMissions();
   game.golem = { cooldown: GOLEM_COOLDOWN, ready: false, active: false, timer: 0, kills: 0 };
   game.dungeon = { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1 }, kills: 0 };
-  // Artifacts, achievements and cumulative stats persist across runs — leave them.
+  game.particles = [];
+  game.shake = { time: 0, intensity: 0 };
+  // Artifacts, achievements, difficulty and cumulative stats persist across runs.
   ui.gameOver.hidden = true;
   ui.logList.innerHTML = '';
-  log('A new run begins. Build your guardians wisely!');
+  const diff = DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal;
+  log(`A new ${diff.name} run begins. Build your guardians wisely!`);
   if (game.artifacts.sb > 0 || game.artifacts.mg > 0) {
     log(`Artifacts active — Safe Box Lv ${game.artifacts.sb}, Money Gun Lv ${game.artifacts.mg}`, 'epic');
   }
@@ -1536,6 +1712,7 @@ function init() {
     if (saved.artifacts)    game.artifacts    = Object.assign(game.artifacts, saved.artifacts);
     if (saved.achievements) game.achievements = saved.achievements;
     if (saved.stats)        game.stats        = Object.assign(game.stats, saved.stats);
+    if (saved.difficulty && DIFFICULTIES[saved.difficulty]) game.difficulty = saved.difficulty;
   }
   game.missions = makeMissions();
   renderMissions();
