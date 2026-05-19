@@ -141,6 +141,10 @@ const ACHIEVEMENTS = [
   { id: 'immortal',    title: 'Beyond Mythic',    desc: 'Summon an Immortal guardian.' },
   { id: 'hardClear',   title: 'Hard Mode Clear',  desc: 'Reach wave 30 on Hard.' },
   { id: 'hellRun',     title: 'Welcome to Hell',  desc: 'Reach wave 10 on Hell.' },
+  { id: 'stoneHoard',  title: 'Stone Hoarder',    desc: 'Hold 30 Luck Stones at once.' },
+  { id: 'dungeon5',    title: 'Tier 5 Crawler',   desc: 'Clear Dungeon Tier 5.' },
+  { id: 'recipeAll',   title: 'Recipe Collector', desc: 'Forge every Mythic recipe at least once.' },
+  { id: 'untouched',   title: 'Iron Codebase',    desc: 'Clear a wave with zero escapes.' },
 ];
 
 function loadSave() {
@@ -230,10 +234,12 @@ const game = {
   dungeon: { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1 }, kills: 0 },
   artifacts: { sb: 0, mg: 0 },
   achievements: {},
-  stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0 },
+  stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, recipesUsed: {} },
   difficulty: 'normal',
   particles: [],
+  rings: [],
   shake: { time: 0, intensity: 0 },
+  waveEscapes: 0,
 };
 
 const ui = {};
@@ -318,6 +324,7 @@ function makeEnemy(kind, wave) {
     slowTimer: 0, slowAmount: 0,
     defDownTimer: 0, defDownAmount: 0,
     dead: false, escaped: false,
+    entryTimer: kind === 'boss' ? 0.9 : 0,
   };
   const p = positionAt(0);
   e.x = p.x; e.y = p.y;
@@ -329,6 +336,7 @@ function startWave() {
   game.spawnQueue = buildWave(game.wave);
   game.spawnTimer = 0.4;
   game.waveRunning = true;
+  game.waveEscapes = 0;
   showBanner(`Wave ${game.wave}${game.wave % 10 === 0 ? ' — BOSS' : ''}`);
   log(`Wave ${game.wave} starts`);
   updateUI();
@@ -338,8 +346,14 @@ function updateWaveSpawning(dt) {
   game.spawnTimer -= dt;
   while (game.spawnTimer <= 0 && game.spawnQueue.length > 0) {
     const next = game.spawnQueue.shift();
-    game.enemies.push(makeEnemy(next.kind, game.wave));
-    if (next.kind === 'boss') triggerShake(6, 0.5);
+    const enemy = makeEnemy(next.kind, game.wave);
+    game.enemies.push(enemy);
+    if (next.kind === 'boss') {
+      triggerShake(8, 0.6);
+      showBanner('⚠ BOSS INCOMING ⚠');
+      spawnRing(enemy.x, enemy.y, 120, '#ff7e7e', 0.7, 4);
+      spawnParticleBurst(enemy.x, enemy.y, '#ff7e7e', 24);
+    }
     game.spawnTimer += spawnDelay(next.kind);
   }
 }
@@ -350,6 +364,7 @@ function checkWaveComplete() {
     const bonus = 6 + Math.floor(game.wave * 1.2);
     game.gold += bonus;
     log(`Wave ${game.wave} cleared (+${bonus}g)`, 'gold');
+    if (game.waveEscapes === 0) unlock('untouched');
     if (game.wave % 5 === 0) {
       game.stones += 1;
       log('+1 Luck Stone (5-wave bonus)', 'stone');
@@ -376,6 +391,7 @@ function updateEnemies(dt) {
     if (e.defDownTimer > 0) { e.defDownTimer = Math.max(0, e.defDownTimer - dt); if (e.defDownTimer === 0) e.defDownAmount = 0; }
 
     if (e.stationary) continue;
+    if (e.entryTimer > 0) { e.entryTimer = Math.max(0, e.entryTimer - dt); continue; }
 
     let speed = e.baseSpeed;
     if (e.stunTimer > 0) speed = 0;
@@ -386,6 +402,7 @@ function updateEnemies(dt) {
     e.x = pos.x; e.y = pos.y;
     if (pos.done) {
       e.escaped = true;
+      game.waveEscapes++;
       const dmg = e.kind === 'boss' ? 5 : e.kind === 'elite' ? 2 : 1;
       game.hp -= dmg;
       triggerShake(4 + dmg, 0.25);
@@ -446,6 +463,7 @@ function onEnemyKilled(enemy, killer) {
     if (k && k.loot && enemy.kind !== 'golem') {
       game.gold += k.loot;
       spawnPopup(enemy.x, enemy.y - enemy.size - 14, `+${k.loot}g`, '#ffd166');
+      spawnLootCoins(enemy.x, enemy.y, Math.min(6, 2 + Math.floor(k.loot / 3)));
     }
   }
   noteKill();
@@ -485,6 +503,7 @@ function updateUnits(dt) {
 
     if (d.aoe) {
       const aoeR = d.aoe * TILE;
+      spawnRing(target.x, target.y, aoeR, d.type === 'magic' ? '#9bd9ff' : '#ffd166', 0.35, 2);
       for (const e of game.enemies) {
         if (e === target || e.dead || e.escaped) continue;
         if (Math.hypot(e.x - target.x, e.y - target.y) <= aoeR) {
@@ -496,14 +515,19 @@ function updateUnits(dt) {
       const stunMult = (DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal).stunMult;
       if (target.stunTimer <= 0) noteStun();
       target.stunTimer = Math.max(target.stunTimer, d.stun.duration * stunMult);
+      spawnStunSparks(target.x, target.y - target.size);
     }
     if (d.slow) {
+      const fresh = target.slowTimer <= 0;
       target.slowAmount = Math.max(target.slowAmount, d.slow.amount);
       target.slowTimer  = Math.max(target.slowTimer,  d.slow.duration);
+      if (fresh) spawnSlowFlakes(target.x, target.y - target.size);
     }
     if (d.defDown) {
+      const fresh = target.defDownTimer <= 0;
       target.defDownAmount = Math.max(target.defDownAmount, d.defDown.amount);
       target.defDownTimer  = Math.max(target.defDownTimer,  d.defDown.duration);
+      if (fresh) spawnRing(target.x, target.y, target.size + 12, '#ff9090', 0.3, 2);
     }
     game.beams.push({
       x1: c.x, y1: c.y, x2: target.x, y2: target.y,
@@ -604,7 +628,15 @@ function mergeSelected() {
     ? MYTHIC_RECIPES[u.id]
     : POOLS[nextRarity][Math.floor(Math.random() * POOLS[nextRarity].length)];
   const newUnit = spawnUnit(newId, keepCell.col, keepCell.row);
-  if (usedRecipe) unlock('forge');
+  if (usedRecipe) {
+    unlock('forge');
+    if (!game.stats.recipesUsed) game.stats.recipesUsed = {};
+    game.stats.recipesUsed[newId] = true;
+    const haveAll = Object.values(MYTHIC_RECIPES).every(id => game.stats.recipesUsed[id]);
+    if (haveAll) unlock('recipeAll');
+    spawnRing(cellCenter(keepCell.col, keepCell.row).x, cellCenter(keepCell.col, keepCell.row).y, 48, RARITY_COLORS.Mythic, 0.55, 4);
+    spawnParticleBurst(cellCenter(keepCell.col, keepCell.row).x, cellCenter(keepCell.col, keepCell.row).y, RARITY_COLORS.Mythic, 18);
+  }
   game.selectedUnit = newUnit;
   completeMission('firstMerge');
   log(`Merge → ${UNITS[newId].name}!`, nextRarity.toLowerCase());
@@ -772,6 +804,7 @@ function updateDungeon(dt) {
     game.dungeon.boss.maxHp = newHp;
     game.stats.dungeonClears = (game.stats.dungeonClears || 0) + 1;
     if (game.stats.dungeonClears >= 10) unlock('dungeon10');
+    if (game.dungeon.boss.tier >= 5) unlock('dungeon5');
     saveProgress();
   }
   renderDungeonStatus();
@@ -856,6 +889,11 @@ function updateEffects(dt) {
     p.vy += 240 * dt;
   }
   game.particles = game.particles.filter(p => p.life > 0);
+  for (const r of game.rings) {
+    r.life -= dt;
+    r.radius = r.maxRadius * (1 - r.life / r.maxLife);
+  }
+  game.rings = game.rings.filter(r => r.life > 0);
   if (game.shake.time > 0) game.shake.time = Math.max(0, game.shake.time - dt);
 }
 
@@ -876,6 +914,55 @@ function spawnParticleBurst(x, y, color, count = 8) {
       size: 1.5 + Math.random() * 2,
     });
   }
+}
+
+function spawnStunSparks(x, y) {
+  for (let i = 0; i < 6; i++) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8;
+    const speed = 90 + Math.random() * 70;
+    const life = 0.28 + Math.random() * 0.12;
+    game.particles.push({
+      x, y, color: '#ffe066',
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life, maxLife: life,
+      size: 1.5 + Math.random() * 1.5,
+    });
+  }
+}
+
+function spawnSlowFlakes(x, y) {
+  for (let i = 0; i < 5; i++) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI;
+    const speed = 25 + Math.random() * 40;
+    const life = 0.55 + Math.random() * 0.3;
+    game.particles.push({
+      x, y, color: '#9bd9ff',
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life, maxLife: life,
+      size: 2 + Math.random() * 1.5,
+    });
+  }
+}
+
+function spawnLootCoins(x, y, count = 4) {
+  for (let i = 0; i < count; i++) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * (Math.PI / 2);
+    const speed = 70 + Math.random() * 60;
+    const life = 0.65 + Math.random() * 0.2;
+    game.particles.push({
+      x, y, color: '#ffd166',
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 110,
+      life, maxLife: life,
+      size: 3.5 + Math.random() * 1.5,
+    });
+  }
+}
+
+function spawnRing(x, y, maxRadius, color, life = 0.45, width = 3) {
+  game.rings.push({ x, y, radius: 0, maxRadius, color, life, maxLife: life, width });
 }
 
 function triggerShake(intensity, time) {
@@ -1045,25 +1132,28 @@ function drawUnits(ctx) {
 function drawEnemies(ctx) {
   for (const e of game.enemies) {
     if (e.dead || e.escaped) continue;
+    const entryFrac = e.entryTimer > 0 ? (e.entryTimer / 0.9) : 0;
+    const scale = 1 + entryFrac * 0.7;
+    const sz = e.size * scale;
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
-    ctx.ellipse(e.x, e.y + e.size - 2, e.size * 0.85, 3.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(e.x, e.y + sz - 2, sz * 0.85, 3.5, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = e.color;
     ctx.beginPath();
-    ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2);
+    ctx.arc(e.x, e.y, sz, 0, Math.PI * 2);
     ctx.fill();
-    ctx.font = `${Math.round(e.size * 1.2)}px ${EMOJI_FONT}`;
+    ctx.font = `${Math.round(sz * 1.2)}px ${EMOJI_FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(e.glyph, e.x, e.y + 1);
     // HP bar
-    const w = e.size * 2.2;
+    const w = sz * 2.2;
     const hp = Math.max(0, e.hp / e.maxHp);
     ctx.fillStyle = '#000';
-    ctx.fillRect(e.x - w / 2 - 1, e.y - e.size - 10, w + 2, 5);
+    ctx.fillRect(e.x - w / 2 - 1, e.y - sz - 10, w + 2, 5);
     ctx.fillStyle = hp > 0.55 ? '#5fd870' : hp > 0.25 ? '#f5c542' : '#e15555';
-    ctx.fillRect(e.x - w / 2, e.y - e.size - 9, w * hp, 3);
+    ctx.fillRect(e.x - w / 2, e.y - sz - 9, w * hp, 3);
     // statuses
     if (e.stunTimer > 0) drawStatusIcon(ctx, e, '⚡', '#ffe066', -1);
     if (e.slowAmount > 0) drawStatusIcon(ctx, e, '❄', '#9bd9ff', 0);
@@ -1090,6 +1180,19 @@ function drawBeams(ctx) {
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
+}
+
+function drawRings(ctx) {
+  for (const r of game.rings) {
+    const alpha = Math.max(0, r.life / r.maxLife);
+    ctx.globalAlpha = alpha * 0.85;
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = r.width;
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawParticles(ctx) {
@@ -1150,6 +1253,7 @@ function draw() {
   drawUnits(ctx);
   drawEnemies(ctx);
   drawBeams(ctx);
+  drawRings(ctx);
   drawParticles(ctx);
   drawPopups(ctx);
   ctx.restore();
@@ -1175,6 +1279,7 @@ function gameLoop(timestamp) {
     updateDungeon(dt);
     updateArtifactPassives(dt);
     if (game.gold >= 5000) checkHoard();
+    if (game.stones >= 30) unlock('stoneHoard');
     updateEffects(dt);
     // Refresh UI numbers (gold ticks from kills); cheap enough each frame.
     ui.gold.textContent = Math.floor(game.gold);
@@ -1188,20 +1293,27 @@ function gameLoop(timestamp) {
   requestAnimationFrame(gameLoop);
 }
 
-/* === Mouse interaction === */
+/* === Input (mouse + touch) === */
+function eventClient(ev) {
+  if (ev.touches && ev.touches.length) return { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+  if (ev.changedTouches && ev.changedTouches.length) return { x: ev.changedTouches[0].clientX, y: ev.changedTouches[0].clientY };
+  return { x: ev.clientX, y: ev.clientY };
+}
+
 function canvasCoords(ev) {
+  const p = eventClient(ev);
   const r = game.canvas.getBoundingClientRect();
   const sx = game.canvas.width  / r.width;
   const sy = game.canvas.height / r.height;
-  return { x: (ev.clientX - r.left) * sx, y: (ev.clientY - r.top) * sy };
+  return { x: (p.x - r.left) * sx, y: (p.y - r.top) * sy };
 }
 
-function findUnitAt(x, y) {
+function findUnitAt(x, y, radius = 32) {
   let best = null, bestDist = Infinity;
   for (const u of game.units) {
     const c = cellCenter(u.col, u.row);
     const d = Math.hypot(x - c.x, y - c.y);
-    if (d <= 26 && d < bestDist) { bestDist = d; best = u; }
+    if (d <= radius && d < bestDist) { bestDist = d; best = u; }
   }
   return best;
 }
@@ -1344,6 +1456,10 @@ function setupUI() {
   ui.canvas.addEventListener('mousedown', onMouseDown);
   ui.canvas.addEventListener('mousemove', onMouseMove);
   window.addEventListener('mouseup', onMouseUp);
+  ui.canvas.addEventListener('touchstart', onMouseDown, { passive: true });
+  ui.canvas.addEventListener('touchmove', (e) => { if (game.draggingUnit) e.preventDefault(); onMouseMove(e); }, { passive: false });
+  window.addEventListener('touchend',    onMouseUp);
+  window.addEventListener('touchcancel', onMouseUp);
 
   // Keyboard shortcuts
   window.addEventListener('keydown', (e) => {
@@ -1687,7 +1803,9 @@ function restart() {
   game.golem = { cooldown: GOLEM_COOLDOWN, ready: false, active: false, timer: 0, kills: 0 };
   game.dungeon = { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1 }, kills: 0 };
   game.particles = [];
+  game.rings = [];
   game.shake = { time: 0, intensity: 0 };
+  game.waveEscapes = 0;
   // Artifacts, achievements, difficulty and cumulative stats persist across runs.
   ui.gameOver.hidden = true;
   ui.logList.innerHTML = '';
