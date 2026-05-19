@@ -24,6 +24,19 @@
     <main>
       <div id="board-wrap">
         <canvas id="board" width="720" height="432"></canvas>
+        <button id="missions-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+          <span class="btn-label">Missions</span>
+          <span id="missions-count" class="chip">0</span>
+        </button>
+        <div id="missions-popup" hidden role="dialog" aria-label="Missions">
+          <div class="popup-card">
+            <header>
+              <h3>Missions</h3>
+              <button id="missions-close" type="button" aria-label="Close">×</button>
+            </header>
+            <ul id="mission-list"></ul>
+          </div>
+        </div>
         <div id="board-hud">
           <div id="wave-banner" hidden></div>
           <div id="game-over" hidden>
@@ -46,11 +59,6 @@
             <button id="sell-btn">Sell</button>
             <button id="merge-btn" hidden>Merge ×3</button>
           </div>
-        </section>
-
-        <section id="missions" class="panel">
-          <h3>Missions</h3>
-          <ul id="mission-list"></ul>
         </section>
 
         <section id="legend" class="panel">

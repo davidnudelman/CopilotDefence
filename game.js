@@ -827,6 +827,10 @@ function setupUI() {
   ui.sellBtn      = document.getElementById('sell-btn');
   ui.mergeBtn     = document.getElementById('merge-btn');
   ui.missionList  = document.getElementById('mission-list');
+  ui.missionsToggle = document.getElementById('missions-toggle');
+  ui.missionsPopup  = document.getElementById('missions-popup');
+  ui.missionsClose  = document.getElementById('missions-close');
+  ui.missionsCount  = document.getElementById('missions-count');
   ui.logList      = document.getElementById('log-list');
   ui.gameOver     = document.getElementById('game-over');
   ui.endTitle     = document.getElementById('end-title');
@@ -844,6 +848,14 @@ function setupUI() {
   ui.sellBtn.addEventListener('click', sellSelected);
   ui.mergeBtn.addEventListener('click', mergeSelected);
   ui.restart.addEventListener('click', restart);
+
+  ui.missionsToggle.addEventListener('click', toggleMissionsPopup);
+  ui.missionsClose.addEventListener('click', () => setMissionsPopup(false));
+  document.addEventListener('click', (e) => {
+    if (ui.missionsPopup.hidden) return;
+    if (ui.missionsPopup.contains(e.target) || ui.missionsToggle.contains(e.target)) return;
+    setMissionsPopup(false);
+  });
 
   ui.canvas.addEventListener('mousedown', onMouseDown);
   ui.canvas.addEventListener('mousemove', onMouseMove);
@@ -927,6 +939,18 @@ function renderMissions() {
     ].filter(Boolean).join(' · ');
     return `<li class="${m.done ? 'done' : ''}"><span>${m.text}</span><span class="reward">${reward}</span></li>`;
   }).join('');
+  const open = game.missions.filter(m => !m.done).length;
+  ui.missionsCount.textContent = open;
+  ui.missionsCount.classList.toggle('empty', open === 0);
+}
+
+function setMissionsPopup(open) {
+  ui.missionsPopup.hidden = !open;
+  ui.missionsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function toggleMissionsPopup() {
+  setMissionsPopup(ui.missionsPopup.hidden);
 }
 
 function showBanner(text) {
