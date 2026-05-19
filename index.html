@@ -112,44 +112,27 @@
         </div>
       </header>
 
+      <nav id="action-bar" aria-label="Game actions">
+        <button id="golem-btn" type="button" hidden>
+          <span class="btn-label">🗿</span>
+          <span id="golem-timer" class="chip">ready</span>
+        </button>
+        <button id="missions-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+          <span class="btn-label">Missions</span>
+          <span id="missions-count" class="chip">0</span>
+        </button>
+        <button id="dungeon-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+          <span class="btn-label">Dungeon</span>
+          <span id="dungeon-count" class="chip empty">0</span>
+        </button>
+        <button id="artifacts-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+          <span class="btn-label">Artifacts</span>
+        </button>
+      </nav>
+
       <main>
         <div id="board-wrap">
           <canvas id="board" width="720" height="432"></canvas>
-          <button id="golem-btn" type="button" hidden>
-            <span class="btn-label">🗿 Golem</span>
-            <span id="golem-timer" class="chip">ready</span>
-          </button>
-          <div class="board-chips">
-            <button id="missions-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
-              <span class="btn-label">Missions</span>
-              <span id="missions-count" class="chip">0</span>
-            </button>
-            <button id="dungeon-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
-              <span class="btn-label">Dungeon</span>
-              <span id="dungeon-count" class="chip empty">0</span>
-            </button>
-            <button id="artifacts-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
-              <span class="btn-label">Artifacts</span>
-            </button>
-          </div>
-          <div id="missions-popup" hidden role="dialog" aria-label="Missions">
-            <div class="popup-card">
-              <header><h3>Missions</h3><button id="missions-close" type="button" aria-label="Close">×</button></header>
-              <ul id="mission-list"></ul>
-            </div>
-          </div>
-          <div id="dungeon-popup" hidden role="dialog" aria-label="Dungeon">
-            <div class="popup-card">
-              <header><h3>Dungeon</h3><button id="dungeon-close" type="button" aria-label="Close">×</button></header>
-              <div id="dungeon-body"></div>
-            </div>
-          </div>
-          <div id="artifacts-popup" hidden role="dialog" aria-label="Artifacts">
-            <div class="popup-card">
-              <header><h3>Artifacts</h3><button id="artifacts-close" type="button" aria-label="Close">×</button></header>
-              <div id="artifacts-body"></div>
-            </div>
-          </div>
           <div id="board-hud">
             <div id="wave-banner" hidden></div>
             <div id="game-over" hidden>
@@ -164,20 +147,6 @@
             </div>
           </div>
         </div>
-
-        <aside id="sidebar">
-          <section id="unit-info" class="panel">
-            <h3>Inspector</h3>
-            <div id="unit-info-body">
-              <p class="hint">Tap a guardian to inspect. Drag to reposition.</p>
-            </div>
-            <div id="unit-actions" hidden>
-              <button id="sell-btn">Sell</button>
-              <button id="merge-btn" hidden>Merge ×3</button>
-              <button id="dungeon-btn" hidden>Dungeon</button>
-            </div>
-          </section>
-        </aside>
       </main>
 
       <footer id="controls">
@@ -214,6 +183,53 @@
         <ul id="log-list"></ul>
       </div>
     </div>
+
+    <div id="sheet-backdrop" aria-hidden="true"></div>
+
+    <aside id="missions-popup" class="sheet" role="dialog" aria-label="Missions" aria-modal="false">
+      <header>
+        <span class="grab"></span>
+        <h3>Missions</h3>
+        <button id="missions-close" type="button" aria-label="Close" data-close="missions">×</button>
+      </header>
+      <div class="sheet-body">
+        <ul id="mission-list"></ul>
+      </div>
+    </aside>
+
+    <aside id="dungeon-popup" class="sheet" role="dialog" aria-label="Dungeon" aria-modal="false">
+      <header>
+        <span class="grab"></span>
+        <h3>Dungeon</h3>
+        <button id="dungeon-close" type="button" aria-label="Close" data-close="dungeon">×</button>
+      </header>
+      <div class="sheet-body" id="dungeon-body"></div>
+    </aside>
+
+    <aside id="artifacts-popup" class="sheet" role="dialog" aria-label="Artifacts" aria-modal="false">
+      <header>
+        <span class="grab"></span>
+        <h3>Artifacts</h3>
+        <button id="artifacts-close" type="button" aria-label="Close" data-close="artifacts">×</button>
+      </header>
+      <div class="sheet-body" id="artifacts-body"></div>
+    </aside>
+
+    <aside id="inspector-sheet" class="sheet" role="dialog" aria-label="Inspector" aria-modal="false">
+      <header>
+        <span class="grab"></span>
+        <h3>Inspector</h3>
+        <button id="inspector-close" type="button" aria-label="Close" data-close="inspector">×</button>
+      </header>
+      <div class="sheet-body">
+        <div id="unit-info-body"></div>
+        <div id="unit-actions" hidden>
+          <button id="sell-btn">Sell</button>
+          <button id="merge-btn" hidden>Merge ×3</button>
+          <button id="dungeon-btn" hidden>Send to Dungeon</button>
+        </div>
+      </div>
+    </aside>
   </div>
 
   <script src="game.js"></script>

@@ -1409,6 +1409,9 @@ function setupUI() {
   ui.dungeonBtn     = document.getElementById('dungeon-btn');
   ui.menuBtn        = document.getElementById('menu-btn');
   ui.endMenu        = document.getElementById('end-menu');
+  ui.inspectorSheet = document.getElementById('inspector-sheet');
+  ui.inspectorClose = document.getElementById('inspector-close');
+  ui.sheetBackdrop  = document.getElementById('sheet-backdrop');
   ui.logList      = document.getElementById('log-list');
   ui.gameOver     = document.getElementById('game-over');
   ui.endTitle     = document.getElementById('end-title');
@@ -1440,14 +1443,13 @@ function setupUI() {
   ui.golemBtn.addEventListener('click', startGolem);
   ui.menuBtn.addEventListener('click', backToMenu);
   ui.endMenu.addEventListener('click', backToMenu);
-  document.addEventListener('click', (e) => {
-    for (const key of POPUP_KEYS) {
-      const popup = ui[`${key}Popup`];
-      const toggle = ui[`${key}Toggle`];
-      if (!popup || popup.hidden) continue;
-      if (popup.contains(e.target) || toggle.contains(e.target)) continue;
-      setPopup(key, false);
-    }
+  ui.inspectorClose.addEventListener('click', () => {
+    game.selectedUnit = null;
+    renderUnitInfo();
+  });
+  ui.sheetBackdrop.addEventListener('click', () => {
+    closeAllPopups();
+    if (game.selectedUnit) { game.selectedUnit = null; renderUnitInfo(); }
   });
 
   ui.canvas.addEventListener('mousedown', onMouseDown);
@@ -1512,16 +1514,30 @@ function updateUI() {
   } else {
     ui.golemBtn.hidden = true;
   }
-  if (ui.artifactsPopup && !ui.artifactsPopup.hidden) renderArtifacts();
+  if (ui.artifactsPopup && ui.artifactsPopup.classList.contains('open')) renderArtifacts();
   renderUnitInfo();
 }
 
 function renderUnitInfo() {
   const u = game.selectedUnit;
   if (!u) {
-    ui.unitInfo.innerHTML = '<p class="hint">Click a unit on the board to inspect. Drag to reposition. Press <b>S</b> to summon, <b>Space</b> to start waves.</p>';
+    ui.unitInfo.innerHTML = '';
     ui.unitActions.hidden = true;
+    if (ui.inspectorSheet) {
+      ui.inspectorSheet.classList.remove('open');
+      updateBackdrop();
+    }
     return;
+  }
+  if (ui.inspectorSheet && !ui.inspectorSheet.classList.contains('open')) {
+    // Opening the inspector closes any other open sheet.
+    for (const k of ['missions', 'dungeon', 'artifacts']) {
+      ui[`${k}Popup`].classList.remove('open');
+      ui[`${k}Toggle`]?.classList.remove('active');
+      ui[`${k}Toggle`]?.setAttribute('aria-expanded', 'false');
+    }
+    ui.inspectorSheet.classList.add('open');
+    updateBackdrop();
   }
   const d = UNITS[u.id];
   const dmg = unitDamage(u);
@@ -1565,20 +1581,43 @@ function renderMissions() {
   ui.missionsCount.classList.toggle('empty', open === 0);
 }
 
+function isSheetOpen(el) { return !!el && el.classList.contains('open'); }
+
+function updateBackdrop() {
+  const open = ['missionsPopup', 'dungeonPopup', 'artifactsPopup', 'inspectorSheet']
+    .some(k => isSheetOpen(ui[k]));
+  ui.sheetBackdrop.classList.toggle('open', open);
+}
+
 function setPopup(key, open) {
   const popup = ui[`${key}Popup`];
   const toggle = ui[`${key}Toggle`];
   if (!popup) return;
-  popup.hidden = !open;
-  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   if (open) {
+    // Open this sheet exclusively. Inspector is driven by selection,
+    // so opening any other sheet should clear the current selection.
+    for (const k of ['missions', 'dungeon', 'artifacts']) {
+      if (k !== key) ui[`${k}Popup`].classList.remove('open');
+    }
+    if (game.selectedUnit) {
+      game.selectedUnit = null;
+      renderUnitInfo();
+    }
     if (key === 'artifacts') renderArtifacts();
     if (key === 'dungeon')   renderDungeon();
   }
+  popup.classList.toggle('open', open);
+  if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (toggle) toggle.classList.toggle('active', open);
+  updateBackdrop();
 }
 
 function togglePopup(key) {
-  setPopup(key, ui[`${key}Popup`].hidden);
+  setPopup(key, !isSheetOpen(ui[`${key}Popup`]));
+}
+
+function closeAllPopups() {
+  for (const k of ['missions', 'dungeon', 'artifacts']) setPopup(k, false);
 }
 
 function renderRecipes() {
@@ -1640,7 +1679,7 @@ function renderDungeon() {
 }
 
 function renderDungeonStatus() {
-  if (ui.dungeonPopup.hidden) return;
+  if (!ui.dungeonPopup.classList.contains('open')) return;
   const boss = game.dungeon.boss;
   const txt = document.getElementById('dungeon-hp-text');
   const fill = document.getElementById('dungeon-hp-fill');
@@ -1736,6 +1775,8 @@ function endGame(victory) {
   game.gameOver = true;
   game.runActive = false;
   game.victory = victory;
+  closeAllPopups();
+  if (game.selectedUnit) { game.selectedUnit = null; renderUnitInfo(); }
   ui.gameOver.hidden = false;
   ui.endTitle.textContent = victory ? 'Victory!' : 'Defeat';
   ui.endText.textContent  = victory
@@ -1821,6 +1862,8 @@ function startRunFromWelcome() {
 function resumeRun() { showView('game'); }
 
 function backToMenu() {
+  closeAllPopups();
+  if (game.selectedUnit) { game.selectedUnit = null; renderUnitInfo(); }
   if (game.gameOver) game.runActive = false;
   showView('welcome');
 }
