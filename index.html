@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Copilot Defence</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="brand">
+        <span class="logo">CD</span>
+        <span class="title">Copilot Defence</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><span class="label">Wave</span><span id="wave-display">1</span><span class="dim">/80</span></div>
+        <div class="stat"><span class="label">Gold</span><span id="gold-display">50</span></div>
+        <div class="stat"><span class="label">Luck Stones</span><span id="stones-display">0</span></div>
+        <div class="stat hp"><span class="label">Base HP</span><span id="hp-display">20</span></div>
+      </div>
+    </header>
+
+    <main>
+      <div id="board-wrap">
+        <canvas id="board" width="720" height="432"></canvas>
+        <div id="board-hud">
+          <div id="wave-banner" hidden></div>
+          <div id="game-over" hidden>
+            <div class="over-card">
+              <h2 id="end-title">Defeat</h2>
+              <p id="end-text">The codebase is overrun.</p>
+              <button id="restart">Start Over</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside id="sidebar">
+        <section id="unit-info" class="panel">
+          <h3>Inspector</h3>
+          <div id="unit-info-body">
+            <p class="hint">Click a unit on the board to inspect. Drag to reposition.</p>
+          </div>
+          <div id="unit-actions" hidden>
+            <button id="sell-btn">Sell</button>
+            <button id="merge-btn" hidden>Merge ×3</button>
+          </div>
+        </section>
+
+        <section id="missions" class="panel">
+          <h3>Missions</h3>
+          <ul id="mission-list"></ul>
+        </section>
+
+        <section id="legend" class="panel">
+          <h3>Rarity</h3>
+          <ul class="rarity-legend">
+            <li><span class="dot common"></span>Common</li>
+            <li><span class="dot rare"></span>Rare</li>
+            <li><span class="dot epic"></span>Epic</li>
+            <li><span class="dot legendary"></span>Legendary</li>
+            <li><span class="dot mythic"></span>Mythic</li>
+          </ul>
+        </section>
+      </aside>
+    </main>
+
+    <footer id="controls">
+      <button id="summon-btn" class="primary">
+        <span class="btn-label">Summon</span>
+        <span class="btn-cost"><span id="summon-cost">8</span>g</span>
+      </button>
+      <button id="roulette-btn" class="secondary">
+        <span class="btn-label">Epic Roulette</span>
+        <span class="btn-cost">1 stone</span>
+      </button>
+      <button id="upg-common" class="upgrade">
+        <span class="btn-label">+Common DMG</span>
+        <span class="btn-cost"><span id="upg-common-cost">20</span>g</span>
+      </button>
+      <button id="upg-epic" class="upgrade">
+        <span class="btn-label">+Epic DMG</span>
+        <span class="btn-cost"><span id="upg-epic-cost">60</span>g</span>
+      </button>
+      <button id="upg-mythic" class="upgrade">
+        <span class="btn-label">+Mythic DMG</span>
+        <span class="btn-cost"><span id="upg-mythic-cost">150</span>g</span>
+      </button>
+      <div class="spacer"></div>
+      <button id="speed-btn">1×</button>
+      <button id="wave-btn">Start Wave</button>
+    </footer>
+
+    <div id="log-panel">
+      <ul id="log-list"></ul>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
