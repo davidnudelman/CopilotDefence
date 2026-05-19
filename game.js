@@ -83,6 +83,68 @@ const MYTHIC_RECIPES = {
   bandit:   'banditlord',
 };
 
+/* === Artifacts (persisted across runs via localStorage) === */
+const STORAGE_KEY = 'copilot-defence-save-v1';
+const ARTIFACT_MAX_LEVEL = 12;
+
+const ARTIFACTS = {
+  sb: {
+    id: 'sb',
+    name: 'Safe Box',
+    glyph: '🏦',
+    desc: 'Generates passive gold each second. Scales with your current stockpile.',
+    rateAt: (lvl, gold) => lvl > 0 ? lvl * (1 + Math.sqrt(Math.max(0, gold) / 500)) : 0,
+    effectAt: (lvl, gold) => `+${ARTIFACTS.sb.rateAt(lvl, gold).toFixed(1)} g/s`,
+    upgradeCost: (lvl) => 2 + lvl,
+  },
+  mg: {
+    id: 'mg',
+    name: 'Money Gun',
+    glyph: '💸',
+    desc: 'Global ATK multiplier for every guardian. Scales with your gold pile.',
+    multAt: (lvl, gold) => 1 + (lvl * 0.05) * Math.sqrt(Math.max(0, gold) / 200),
+    effectAt: (lvl, gold) => `×${ARTIFACTS.mg.multAt(lvl, gold).toFixed(2)} ATK`,
+    upgradeCost: (lvl) => 3 + lvl,
+  },
+};
+const ARTIFACT_ORDER = ['sb', 'mg'];
+
+/* === Achievements (cumulative; persisted across runs) === */
+const ACHIEVEMENTS = [
+  { id: 'firstWave',   title: 'First Commit',     desc: 'Clear wave 1.' },
+  { id: 'wave10',      title: 'Decade',           desc: 'Reach wave 10.' },
+  { id: 'wave30',      title: 'Trifecta',         desc: 'Reach wave 30.' },
+  { id: 'wave50',      title: 'Half Century',     desc: 'Reach wave 50.' },
+  { id: 'victory',     title: 'Total Victory',    desc: 'Clear wave 80.' },
+  { id: 'forge',       title: 'Recipe Forged',    desc: 'Forge a Mythic from a recipe.' },
+  { id: 'banditLord',  title: "Bandit's Honor",   desc: 'Acquire a Bandit Lord.' },
+  { id: 'golem5',      title: 'Golem Hunter',     desc: 'Defeat 5 Golems (cumulative).' },
+  { id: 'dungeon10',   title: 'Dungeon Crawler',  desc: 'Clear 10 dungeon bosses (cumulative).' },
+  { id: 'hoard',       title: 'Hoarder',          desc: 'Hold 5,000 gold at once.' },
+  { id: 'stun100',     title: 'Stun Master',      desc: 'Stun 100 enemies (cumulative).' },
+  { id: 'kill1000',    title: 'Bug Bash',         desc: 'Kill 1,000 enemies (cumulative).' },
+  { id: 'sbMax',       title: 'Vault Engineer',   desc: 'Upgrade Safe Box to Lv 5.' },
+  { id: 'mgMax',       title: 'Cashflow Cannon',  desc: 'Upgrade Money Gun to Lv 5.' },
+];
+
+function loadSave() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      artifacts: game.artifacts,
+      achievements: game.achievements,
+      stats: game.stats,
+    }));
+  } catch {}
+}
+
 /* === Path helpers === */
 function cellCenter(col, row) {
   return { x: col * TILE + TILE / 2, y: row * TILE + TILE / 2 };
@@ -149,6 +211,9 @@ const game = {
   lastTime: 0,
   golem: { cooldown: GOLEM_COOLDOWN, ready: false, active: false, timer: 0, kills: 0 },
   dungeon: { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1 }, kills: 0 },
+  artifacts: { sb: 0, mg: 0 },
+  achievements: {},
+  stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0 },
 };
 
 const ui = {};
@@ -265,10 +330,13 @@ function checkWaveComplete() {
       game.stones += 1;
       log('+1 Luck Stone (5-wave bonus)', 'stone');
     }
-    if (game.wave === 10) completeMission('reachWave10');
-    if (game.wave === 30) completeMission('reachWave30');
+    if (game.wave === 1)  unlock('firstWave');
+    if (game.wave === 10) { completeMission('reachWave10'); unlock('wave10'); }
+    if (game.wave === 30) { completeMission('reachWave30'); unlock('wave30'); }
+    if (game.wave === 50) unlock('wave50');
     if (game.wave >= MAX_WAVES) { endGame(true); return; }
     game.wave++;
+    saveProgress();
     updateUI();
   }
 }
@@ -335,6 +403,9 @@ function onEnemyKilled(enemy, killer) {
     game.golem.cooldown = GOLEM_COOLDOWN;
     log(`Golem defeated (+${reward}g, +2 stones)`, 'gold');
     completeMission('firstGolem');
+    game.stats.golemKills = (game.stats.golemKills || 0) + 1;
+    if (game.stats.golemKills >= 5) unlock('golem5');
+    saveProgress();
     updateUI();
   }
   if (killer) {
@@ -344,6 +415,7 @@ function onEnemyKilled(enemy, killer) {
       spawnPopup(enemy.x, enemy.y - enemy.size - 14, `+${k.loot}g`, '#ffd166');
     }
   }
+  noteKill();
 }
 
 /* === Units === */
@@ -353,6 +425,7 @@ function unitDamage(unit) {
   if (d.rarity === 'Common' || d.rarity === 'Rare') dmg *= 1 + 0.20 * game.upgrades.Common;
   else if (d.rarity === 'Epic')                     dmg *= 1 + 0.20 * game.upgrades.Epic;
   else                                              dmg *= 1 + 0.25 * game.upgrades.Mythic;
+  dmg *= ARTIFACTS.mg.multAt(game.artifacts.mg, game.gold);
   return dmg;
 }
 
@@ -386,6 +459,7 @@ function updateUnits(dt) {
       }
     }
     if (d.stun && Math.random() < d.stun.chance) {
+      if (target.stunTimer <= 0) noteStun();
       target.stunTimer = Math.max(target.stunTimer, d.stun.duration);
     }
     if (d.slow) {
@@ -426,6 +500,7 @@ function spawnUnit(id, col, row) {
   if (d.rarity === 'Epic')      completeMission('firstEpic');
   if (d.rarity === 'Legendary') completeMission('firstLegendary');
   if (d.rarity === 'Mythic')    completeMission('firstMythic');
+  if (id === 'banditlord')      unlock('banditLord');
   const commons = game.units.filter(x => UNITS[x.id].rarity === 'Common').length;
   if (commons >= 5) completeMission('fiveCommons');
   return u;
@@ -469,10 +544,12 @@ function mergeSelected() {
     if (idx >= 0) game.units.splice(idx, 1);
   }
   const nextRarity = RARITY_ORDER[tierIdx + 1];
-  const newId = (d.rarity === 'Legendary' && MYTHIC_RECIPES[u.id])
+  const usedRecipe = d.rarity === 'Legendary' && MYTHIC_RECIPES[u.id];
+  const newId = usedRecipe
     ? MYTHIC_RECIPES[u.id]
     : POOLS[nextRarity][Math.floor(Math.random() * POOLS[nextRarity].length)];
   const newUnit = spawnUnit(newId, keepCell.col, keepCell.row);
+  if (usedRecipe) unlock('forge');
   game.selectedUnit = newUnit;
   completeMission('firstMerge');
   log(`Merge → ${UNITS[newId].name}!`, nextRarity.toLowerCase());
@@ -637,6 +714,9 @@ function updateDungeon(dt) {
     const newHp = DUNGEON_BASE_HP * Math.pow(1.45, tier);
     game.dungeon.boss.hp = newHp;
     game.dungeon.boss.maxHp = newHp;
+    game.stats.dungeonClears = (game.stats.dungeonClears || 0) + 1;
+    if (game.stats.dungeonClears >= 10) unlock('dungeon10');
+    saveProgress();
   }
   renderDungeonStatus();
 }
@@ -657,6 +737,54 @@ function upgrade(tier) {
   game.upgrades[tier]++;
   log(`${tier} damage upgraded → Lv ${game.upgrades[tier]}`, 'gold');
   updateUI();
+}
+
+/* === Artifacts === */
+function updateArtifactPassives(dt) {
+  const rate = ARTIFACTS.sb.rateAt(game.artifacts.sb, game.gold);
+  if (rate > 0) game.gold += rate * dt;
+}
+
+function upgradeArtifact(id) {
+  const def = ARTIFACTS[id];
+  if (!def) return;
+  const lvl = game.artifacts[id];
+  if (lvl >= ARTIFACT_MAX_LEVEL) return;
+  const cost = def.upgradeCost(lvl);
+  if (game.stones < cost) return;
+  game.stones -= cost;
+  game.artifacts[id] = lvl + 1;
+  log(`${def.name} → Lv ${lvl + 1}`, 'stone');
+  if (id === 'sb' && game.artifacts.sb >= 5) unlock('sbMax');
+  if (id === 'mg' && game.artifacts.mg >= 5) unlock('mgMax');
+  saveProgress();
+  renderArtifacts();
+  updateUI();
+}
+
+/* === Achievements === */
+function unlock(id) {
+  if (game.achievements[id]) return;
+  const a = ACHIEVEMENTS.find(x => x.id === id);
+  if (!a) return;
+  game.achievements[id] = true;
+  log(`Achievement: ${a.title}`, 'legendary');
+  saveProgress();
+  renderAchievements();
+}
+
+function noteKill() {
+  game.stats.kills = (game.stats.kills || 0) + 1;
+  if (game.stats.kills >= 1000) unlock('kill1000');
+}
+
+function noteStun() {
+  game.stats.stuns = (game.stats.stuns || 0) + 1;
+  if (game.stats.stuns >= 100) unlock('stun100');
+}
+
+function checkHoard() {
+  if (game.gold >= 5000) unlock('hoard');
 }
 
 /* === Effects === */
@@ -925,6 +1053,8 @@ function gameLoop(timestamp) {
     }
     updateGolem(dt);
     updateDungeon(dt);
+    updateArtifactPassives(dt);
+    if (game.gold >= 5000) checkHoard();
     updateEffects(dt);
     // Refresh UI numbers (gold ticks from kills); cheap enough each frame.
     ui.gold.textContent = Math.floor(game.gold);
@@ -1036,6 +1166,15 @@ function setupUI() {
   ui.dungeonClose   = document.getElementById('dungeon-close');
   ui.dungeonBody    = document.getElementById('dungeon-body');
   ui.dungeonChip    = document.getElementById('dungeon-count');
+  ui.artifactsToggle = document.getElementById('artifacts-toggle');
+  ui.artifactsPopup  = document.getElementById('artifacts-popup');
+  ui.artifactsClose  = document.getElementById('artifacts-close');
+  ui.artifactsBody   = document.getElementById('artifacts-body');
+  ui.achievementsToggle = document.getElementById('achievements-toggle');
+  ui.achievementsPopup  = document.getElementById('achievements-popup');
+  ui.achievementsClose  = document.getElementById('achievements-close');
+  ui.achievementsBody   = document.getElementById('achievements-body');
+  ui.achievementsCount  = document.getElementById('achievements-count');
   ui.golemBtn       = document.getElementById('golem-btn');
   ui.golemTimer     = document.getElementById('golem-timer');
   ui.dungeonBtn     = document.getElementById('dungeon-btn');
@@ -1058,15 +1197,14 @@ function setupUI() {
   ui.dungeonBtn.addEventListener('click', (e) => { e.stopPropagation(); sendToDungeon(); });
   ui.restart.addEventListener('click', restart);
 
-  ui.missionsToggle.addEventListener('click', () => togglePopup('missions'));
-  ui.missionsClose.addEventListener('click', () => setPopup('missions', false));
-  ui.recipesToggle.addEventListener('click', () => togglePopup('recipes'));
-  ui.recipesClose.addEventListener('click', () => setPopup('recipes', false));
-  ui.dungeonToggle.addEventListener('click', () => togglePopup('dungeon'));
-  ui.dungeonClose.addEventListener('click', () => setPopup('dungeon', false));
+  const POPUP_KEYS = ['missions', 'recipes', 'dungeon', 'artifacts', 'achievements'];
+  for (const key of POPUP_KEYS) {
+    ui[`${key}Toggle`].addEventListener('click', () => togglePopup(key));
+    ui[`${key}Close`].addEventListener('click', () => setPopup(key, false));
+  }
   ui.golemBtn.addEventListener('click', startGolem);
   document.addEventListener('click', (e) => {
-    for (const key of ['missions', 'recipes', 'dungeon']) {
+    for (const key of POPUP_KEYS) {
       const popup = ui[`${key}Popup`];
       const toggle = ui[`${key}Toggle`];
       if (!popup || popup.hidden) continue;
@@ -1126,6 +1264,7 @@ function updateUI() {
   } else {
     ui.golemBtn.hidden = true;
   }
+  if (ui.artifactsPopup && !ui.artifactsPopup.hidden) renderArtifacts();
   renderUnitInfo();
 }
 
@@ -1184,6 +1323,11 @@ function setPopup(key, open) {
   if (!popup) return;
   popup.hidden = !open;
   toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) {
+    if (key === 'artifacts')    renderArtifacts();
+    if (key === 'achievements') renderAchievements();
+    if (key === 'dungeon')      renderDungeon();
+  }
 }
 
 function togglePopup(key) {
@@ -1260,6 +1404,71 @@ function renderDungeonStatus() {
   if (fill) fill.style.width = `${Math.max(0, boss.hp / boss.maxHp) * 100}%`;
 }
 
+function renderArtifacts() {
+  const rows = ARTIFACT_ORDER.map(id => {
+    const a = ARTIFACTS[id];
+    const lvl = game.artifacts[id];
+    const cost = a.upgradeCost(lvl);
+    const maxed = lvl >= ARTIFACT_MAX_LEVEL;
+    const effectNow  = lvl  > 0 ? a.effectAt(lvl,     game.gold) : '—';
+    const effectNext = maxed ? '' : a.effectAt(lvl + 1, game.gold);
+    const canBuy = !maxed && game.stones >= cost;
+    return `<li class="artifact-row">
+      <span class="glyph" style="border-color:${RARITY_COLORS.Legendary}">${a.glyph}</span>
+      <div class="meta">
+        <div class="name">${a.name} <span class="lvl">Lv ${lvl}${maxed ? ' · MAX' : ''}</span></div>
+        <div class="desc">${a.desc}</div>
+        <div class="effect">Now: <b>${effectNow}</b>${effectNext ? `   <span class="dim">→ ${effectNext}</span>` : ''}</div>
+      </div>
+      ${maxed
+        ? '<button class="artifact-buy" disabled>Maxed</button>'
+        : `<button class="artifact-buy" data-artifact="${id}" ${canBuy ? '' : 'disabled'}>+1 <span class="cost">${cost}🔷</span></button>`}
+    </li>`;
+  }).join('');
+  ui.artifactsBody.innerHTML = `<ul class="artifact-list">${rows}</ul>
+    <p class="hint">Artifacts persist across runs. Spend Luck Stones to level them up.</p>`;
+  ui.artifactsBody.querySelectorAll('[data-artifact]').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); upgradeArtifact(btn.dataset.artifact); });
+  });
+}
+
+function renderAchievements() {
+  const got = Object.keys(game.achievements).filter(k => game.achievements[k]).length;
+  const total = ACHIEVEMENTS.length;
+  const rows = ACHIEVEMENTS.map(a => {
+    const done = !!game.achievements[a.id];
+    return `<li class="${done ? 'done' : ''}">
+      <span class="ach-mark">${done ? '✓' : '·'}</span>
+      <div class="ach-meta">
+        <div class="ach-title">${a.title}</div>
+        <div class="ach-desc">${a.desc}</div>
+      </div>
+    </li>`;
+  }).join('');
+  ui.achievementsBody.innerHTML = `
+    <div class="ach-header">Unlocked <b>${got}</b> of ${total}</div>
+    <ul class="ach-list">${rows}</ul>
+    <button id="reset-progress" type="button" class="reset-btn">Reset progress</button>
+  `;
+  const resetBtn = ui.achievementsBody.querySelector('#reset-progress');
+  if (resetBtn) resetBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!confirm('Wipe all saved artifacts, achievements and stats?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    game.artifacts = { sb: 0, mg: 0 };
+    game.achievements = {};
+    game.stats = { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0 };
+    log('Progress reset.', 'danger');
+    renderArtifacts();
+    renderAchievements();
+    updateUI();
+  });
+  if (ui.achievementsCount) {
+    ui.achievementsCount.textContent = `${got}/${total}`;
+    ui.achievementsCount.classList.toggle('empty', got === 0);
+  }
+}
+
 function showBanner(text) {
   ui.waveBanner.textContent = text;
   ui.waveBanner.hidden = false;
@@ -1278,6 +1487,8 @@ function endGame(victory) {
   ui.endText.textContent  = victory
     ? `The codebase is secured. Wave ${game.wave} cleared.`
     : `The codebase is overrun on wave ${game.wave}.`;
+  if (victory) unlock('victory');
+  saveProgress();
   updateUI();
 }
 
@@ -1302,26 +1513,42 @@ function restart() {
   game.missions = makeMissions();
   game.golem = { cooldown: GOLEM_COOLDOWN, ready: false, active: false, timer: 0, kills: 0 };
   game.dungeon = { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1 }, kills: 0 };
+  // Artifacts, achievements and cumulative stats persist across runs — leave them.
   ui.gameOver.hidden = true;
   ui.logList.innerHTML = '';
   log('A new run begins. Build your guardians wisely!');
+  if (game.artifacts.sb > 0 || game.artifacts.mg > 0) {
+    log(`Artifacts active — Safe Box Lv ${game.artifacts.sb}, Money Gun Lv ${game.artifacts.mg}`, 'epic');
+  }
   renderMissions();
   renderRecipes();
   renderDungeon();
+  renderArtifacts();
+  renderAchievements();
   updateUI();
 }
 
 /* === Bootstrap === */
 function init() {
   setupUI();
+  const saved = loadSave();
+  if (saved) {
+    if (saved.artifacts)    game.artifacts    = Object.assign(game.artifacts, saved.artifacts);
+    if (saved.achievements) game.achievements = saved.achievements;
+    if (saved.stats)        game.stats        = Object.assign(game.stats, saved.stats);
+  }
   game.missions = makeMissions();
   renderMissions();
   renderRecipes();
   renderDungeon();
+  renderArtifacts();
+  renderAchievements();
   updateUI();
   log('Welcome to Copilot Defence!');
+  if (game.artifacts.sb > 0 || game.artifacts.mg > 0) {
+    log(`Artifacts active — Safe Box Lv ${game.artifacts.sb}, Money Gun Lv ${game.artifacts.mg}`, 'epic');
+  }
   log('Bugs invade the codebase every wave. Summon, merge, and defend.');
-  log('Tip: stand by the path with high-range Mythics for late-wave coverage.');
   game.lastTime = performance.now();
   requestAnimationFrame(gameLoop);
 }
