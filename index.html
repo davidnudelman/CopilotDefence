@@ -2,180 +2,217 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#1c2740" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Copilot Defence" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
   <title>Copilot Defence</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div id="app">
-    <header id="topbar">
-      <div class="brand">
+  <!-- ====== Welcome screen ====== -->
+  <section id="welcome-screen" aria-label="Welcome">
+    <div class="welcome-inner">
+      <header class="welcome-header">
         <span class="logo">CD</span>
-        <span class="title">Copilot Defence</span>
-      </div>
-      <div class="stats">
-        <div class="stat"><span class="label">Wave</span><span id="wave-display">1</span><span class="dim">/80</span></div>
-        <div class="stat"><span class="label">Gold</span><span id="gold-display">50</span></div>
-        <div class="stat"><span class="label">Luck Stones</span><span id="stones-display">0</span></div>
-        <div class="stat hp"><span class="label">Base HP</span><span id="hp-display">20</span></div>
-      </div>
-    </header>
+        <div>
+          <h1>Copilot Defence</h1>
+          <p class="tagline">Defend the codebase against bugs and errors.</p>
+        </div>
+      </header>
 
-    <main>
-      <div id="board-wrap">
-        <canvas id="board" width="720" height="432"></canvas>
-        <button id="golem-btn" type="button" hidden>
-          <span class="btn-label">🗿 Golem</span>
-          <span id="golem-timer" class="chip">ready</span>
+      <div class="welcome-stats">
+        <div class="stat-pill"><span class="k">Achievements</span><span class="v" id="welcome-ach">0/0</span></div>
+        <div class="stat-pill"><span class="k">Safe Box</span><span class="v">Lv <b id="welcome-sb">0</b></span></div>
+        <div class="stat-pill"><span class="k">Money Gun</span><span class="v">Lv <b id="welcome-mg">0</b></span></div>
+      </div>
+
+      <section class="welcome-section">
+        <h2>Difficulty</h2>
+        <div id="welcome-difficulty"></div>
+      </section>
+
+      <div class="welcome-actions">
+        <button id="resume-run" type="button" class="primary-btn" hidden>Resume Run</button>
+        <button id="start-run" type="button" class="primary-btn">Start New Run</button>
+      </div>
+
+      <details class="welcome-details">
+        <summary>Help & Reference</summary>
+        <div class="help-grid">
+          <section>
+            <h3>Rarity</h3>
+            <ul class="rarity-legend">
+              <li><span class="dot common"></span>Common</li>
+              <li><span class="dot rare"></span>Rare</li>
+              <li><span class="dot epic"></span>Epic</li>
+              <li><span class="dot legendary"></span>Legendary</li>
+              <li><span class="dot mythic"></span>Mythic</li>
+              <li><span class="dot immortal"></span>Immortal</li>
+            </ul>
+          </section>
+          <section>
+            <h3>Mythic Recipes</h3>
+            <ul id="welcome-recipes" class="recipe-list"></ul>
+          </section>
+          <section>
+            <h3>Controls</h3>
+            <ul class="kbd-list">
+              <li><kbd>S</kbd> Summon</li>
+              <li><kbd>R</kbd> Epic Roulette</li>
+              <li><kbd>Space</kbd> Start Wave</li>
+              <li><kbd>M</kbd> Merge</li>
+              <li><kbd>X</kbd> Sell</li>
+              <li><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> Speed</li>
+              <li>Tap a guardian to inspect, drag to reposition</li>
+            </ul>
+          </section>
+          <section>
+            <h3>Tips</h3>
+            <ul class="tips-list">
+              <li>Three identical units merge into the next rarity. Legendary merges follow set recipes.</li>
+              <li>Safe Box trickles passive gold based on your stockpile; Money Gun amplifies ATK.</li>
+              <li>Send Bandits to the Dungeon — their Loot passive trickles gold per second.</li>
+              <li>Engage the Golem when it appears for bonus gold and Luck Stones.</li>
+            </ul>
+          </section>
+        </div>
+      </details>
+
+      <details class="welcome-details">
+        <summary>Achievements <span id="welcome-ach-summary" class="dim"></span></summary>
+        <div id="welcome-achievements"></div>
+      </details>
+
+      <footer class="welcome-footer">
+        <button id="welcome-reset" type="button" class="link-btn">Reset all progress</button>
+      </footer>
+    </div>
+  </section>
+
+  <!-- ====== Game screen ====== -->
+  <div id="game-screen" hidden>
+    <div id="app">
+      <header id="topbar">
+        <button id="menu-btn" type="button" class="brand-btn" aria-label="Back to menu">
+          <span class="logo">CD</span>
+          <span class="title">Copilot Defence</span>
         </button>
-        <div class="board-chips">
-          <button id="missions-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
-            <span class="btn-label">Missions</span>
-            <span id="missions-count" class="chip">0</span>
+        <div class="stats">
+          <div class="stat"><span class="label">Wave</span><span id="wave-display">1</span><span class="dim">/80</span></div>
+          <div class="stat"><span class="label">Gold</span><span id="gold-display">50</span></div>
+          <div class="stat"><span class="label">Stones</span><span id="stones-display">0</span></div>
+          <div class="stat hp"><span class="label">HP</span><span id="hp-display">20</span></div>
+        </div>
+      </header>
+
+      <main>
+        <div id="board-wrap">
+          <canvas id="board" width="720" height="432"></canvas>
+          <button id="golem-btn" type="button" hidden>
+            <span class="btn-label">🗿 Golem</span>
+            <span id="golem-timer" class="chip">ready</span>
           </button>
-          <button id="recipes-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
-            <span class="btn-label">Recipes</span>
-          </button>
-          <button id="dungeon-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
-            <span class="btn-label">Dungeon</span>
-            <span id="dungeon-count" class="chip empty">0</span>
-          </button>
-          <button id="artifacts-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
-            <span class="btn-label">Artifacts</span>
-          </button>
-          <button id="achievements-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
-            <span class="btn-label">Achievements</span>
-            <span id="achievements-count" class="chip empty">0/0</span>
-          </button>
-          <button id="difficulty-toggle" type="button" class="difficulty-chip" aria-haspopup="dialog" aria-expanded="false">
-            <span class="btn-label">Mode</span>
-            <span id="difficulty-label" class="chip">Normal</span>
-          </button>
-        </div>
-        <div id="missions-popup" hidden role="dialog" aria-label="Missions">
-          <div class="popup-card">
-            <header>
-              <h3>Missions</h3>
-              <button id="missions-close" type="button" aria-label="Close">×</button>
-            </header>
-            <ul id="mission-list"></ul>
+          <div class="board-chips">
+            <button id="missions-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+              <span class="btn-label">Missions</span>
+              <span id="missions-count" class="chip">0</span>
+            </button>
+            <button id="dungeon-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+              <span class="btn-label">Dungeon</span>
+              <span id="dungeon-count" class="chip empty">0</span>
+            </button>
+            <button id="artifacts-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
+              <span class="btn-label">Artifacts</span>
+            </button>
           </div>
-        </div>
-        <div id="recipes-popup" hidden role="dialog" aria-label="Mythic Recipes">
-          <div class="popup-card">
-            <header>
-              <h3>Mythic Recipes</h3>
-              <button id="recipes-close" type="button" aria-label="Close">×</button>
-            </header>
-            <div id="recipes-body"></div>
+          <div id="missions-popup" hidden role="dialog" aria-label="Missions">
+            <div class="popup-card">
+              <header><h3>Missions</h3><button id="missions-close" type="button" aria-label="Close">×</button></header>
+              <ul id="mission-list"></ul>
+            </div>
           </div>
-        </div>
-        <div id="dungeon-popup" hidden role="dialog" aria-label="Dungeon">
-          <div class="popup-card">
-            <header>
-              <h3>Dungeon</h3>
-              <button id="dungeon-close" type="button" aria-label="Close">×</button>
-            </header>
-            <div id="dungeon-body"></div>
+          <div id="dungeon-popup" hidden role="dialog" aria-label="Dungeon">
+            <div class="popup-card">
+              <header><h3>Dungeon</h3><button id="dungeon-close" type="button" aria-label="Close">×</button></header>
+              <div id="dungeon-body"></div>
+            </div>
           </div>
-        </div>
-        <div id="artifacts-popup" hidden role="dialog" aria-label="Artifacts">
-          <div class="popup-card">
-            <header>
-              <h3>Artifacts</h3>
-              <button id="artifacts-close" type="button" aria-label="Close">×</button>
-            </header>
-            <div id="artifacts-body"></div>
+          <div id="artifacts-popup" hidden role="dialog" aria-label="Artifacts">
+            <div class="popup-card">
+              <header><h3>Artifacts</h3><button id="artifacts-close" type="button" aria-label="Close">×</button></header>
+              <div id="artifacts-body"></div>
+            </div>
           </div>
-        </div>
-        <div id="achievements-popup" hidden role="dialog" aria-label="Achievements">
-          <div class="popup-card">
-            <header>
-              <h3>Achievements</h3>
-              <button id="achievements-close" type="button" aria-label="Close">×</button>
-            </header>
-            <div id="achievements-body"></div>
-          </div>
-        </div>
-        <div id="difficulty-popup" hidden role="dialog" aria-label="Difficulty">
-          <div class="popup-card">
-            <header>
-              <h3>Difficulty</h3>
-              <button id="difficulty-close" type="button" aria-label="Close">×</button>
-            </header>
-            <div id="difficulty-body"></div>
-          </div>
-        </div>
-        <div id="board-hud">
-          <div id="wave-banner" hidden></div>
-          <div id="game-over" hidden>
-            <div class="over-card">
-              <h2 id="end-title">Defeat</h2>
-              <p id="end-text">The codebase is overrun.</p>
-              <button id="restart">Start Over</button>
+          <div id="board-hud">
+            <div id="wave-banner" hidden></div>
+            <div id="game-over" hidden>
+              <div class="over-card">
+                <h2 id="end-title">Defeat</h2>
+                <p id="end-text">The codebase is overrun.</p>
+                <div class="end-actions">
+                  <button id="restart">Start Over</button>
+                  <button id="end-menu" type="button" class="ghost">Back to Menu</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
+        <aside id="sidebar">
+          <section id="unit-info" class="panel">
+            <h3>Inspector</h3>
+            <div id="unit-info-body">
+              <p class="hint">Tap a guardian to inspect. Drag to reposition.</p>
+            </div>
+            <div id="unit-actions" hidden>
+              <button id="sell-btn">Sell</button>
+              <button id="merge-btn" hidden>Merge ×3</button>
+              <button id="dungeon-btn" hidden>Dungeon</button>
+            </div>
+          </section>
+        </aside>
+      </main>
+
+      <footer id="controls">
+        <button id="summon-btn" class="primary">
+          <span class="btn-label">Summon</span>
+          <span class="btn-cost"><span id="summon-cost">8</span>g</span>
+        </button>
+        <button id="roulette-btn" class="secondary">
+          <span class="btn-label">Epic</span>
+          <span class="btn-cost">1🔷</span>
+        </button>
+        <button id="immortal-btn" class="immortal">
+          <span class="btn-label">Immortal</span>
+          <span class="btn-cost"><span id="immortal-cost">8</span>🔷</span>
+        </button>
+        <button id="upg-common" class="upgrade">
+          <span class="btn-label">+C dmg</span>
+          <span class="btn-cost"><span id="upg-common-cost">20</span>g</span>
+        </button>
+        <button id="upg-epic" class="upgrade">
+          <span class="btn-label">+E dmg</span>
+          <span class="btn-cost"><span id="upg-epic-cost">60</span>g</span>
+        </button>
+        <button id="upg-mythic" class="upgrade">
+          <span class="btn-label">+M dmg</span>
+          <span class="btn-cost"><span id="upg-mythic-cost">150</span>g</span>
+        </button>
+        <div class="spacer"></div>
+        <button id="speed-btn">1×</button>
+        <button id="wave-btn">Start Wave</button>
+      </footer>
+
+      <div id="log-panel">
+        <ul id="log-list"></ul>
       </div>
-
-      <aside id="sidebar">
-        <section id="unit-info" class="panel">
-          <h3>Inspector</h3>
-          <div id="unit-info-body">
-            <p class="hint">Click a unit on the board to inspect. Drag to reposition.</p>
-          </div>
-          <div id="unit-actions" hidden>
-            <button id="sell-btn">Sell</button>
-            <button id="merge-btn" hidden>Merge ×3</button>
-            <button id="dungeon-btn" hidden>Dungeon</button>
-          </div>
-        </section>
-
-        <section id="legend" class="panel">
-          <h3>Rarity</h3>
-          <ul class="rarity-legend">
-            <li><span class="dot common"></span>Common</li>
-            <li><span class="dot rare"></span>Rare</li>
-            <li><span class="dot epic"></span>Epic</li>
-            <li><span class="dot legendary"></span>Legendary</li>
-            <li><span class="dot mythic"></span>Mythic</li>
-          </ul>
-        </section>
-      </aside>
-    </main>
-
-    <footer id="controls">
-      <button id="summon-btn" class="primary">
-        <span class="btn-label">Summon</span>
-        <span class="btn-cost"><span id="summon-cost">8</span>g</span>
-      </button>
-      <button id="roulette-btn" class="secondary">
-        <span class="btn-label">Epic Roulette</span>
-        <span class="btn-cost">1 stone</span>
-      </button>
-      <button id="immortal-btn" class="immortal">
-        <span class="btn-label">Immortal Pull</span>
-        <span class="btn-cost"><span id="immortal-cost">8</span> stones</span>
-      </button>
-      <button id="upg-common" class="upgrade">
-        <span class="btn-label">+Common DMG</span>
-        <span class="btn-cost"><span id="upg-common-cost">20</span>g</span>
-      </button>
-      <button id="upg-epic" class="upgrade">
-        <span class="btn-label">+Epic DMG</span>
-        <span class="btn-cost"><span id="upg-epic-cost">60</span>g</span>
-      </button>
-      <button id="upg-mythic" class="upgrade">
-        <span class="btn-label">+Mythic DMG</span>
-        <span class="btn-cost"><span id="upg-mythic-cost">150</span>g</span>
-      </button>
-      <div class="spacer"></div>
-      <button id="speed-btn">1×</button>
-      <button id="wave-btn">Start Wave</button>
-    </footer>
-
-    <div id="log-panel">
-      <ul id="log-list"></ul>
     </div>
   </div>
 

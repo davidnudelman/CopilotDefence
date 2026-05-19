@@ -240,6 +240,8 @@ const game = {
   rings: [],
   shake: { time: 0, intensity: 0 },
   waveEscapes: 0,
+  view: 'welcome',
+  runActive: false,
 };
 
 const ui = {};
@@ -1265,7 +1267,7 @@ function gameLoop(timestamp) {
   const dt = Math.min(0.05, raw) * game.speed;
   game.lastTime = timestamp;
 
-  if (!game.gameOver) {
+  if (game.view === 'game' && !game.gameOver) {
     if (game.waveRunning) {
       updateWaveSpawning(dt);
       updateEnemies(dt);
@@ -1289,7 +1291,7 @@ function gameLoop(timestamp) {
       ui.golemTimer.textContent = `${Math.max(0, Math.ceil(game.golem.timer))}s`;
     }
   }
-  draw();
+  if (game.view === 'game') draw();
   requestAnimationFrame(gameLoop);
 }
 
@@ -1402,27 +1404,20 @@ function setupUI() {
   ui.artifactsPopup  = document.getElementById('artifacts-popup');
   ui.artifactsClose  = document.getElementById('artifacts-close');
   ui.artifactsBody   = document.getElementById('artifacts-body');
-  ui.achievementsToggle = document.getElementById('achievements-toggle');
-  ui.achievementsPopup  = document.getElementById('achievements-popup');
-  ui.achievementsClose  = document.getElementById('achievements-close');
-  ui.achievementsBody   = document.getElementById('achievements-body');
-  ui.achievementsCount  = document.getElementById('achievements-count');
-  ui.difficultyToggle   = document.getElementById('difficulty-toggle');
-  ui.difficultyPopup    = document.getElementById('difficulty-popup');
-  ui.difficultyClose    = document.getElementById('difficulty-close');
-  ui.difficultyBody     = document.getElementById('difficulty-body');
-  ui.difficultyLabel    = document.getElementById('difficulty-label');
-  ui.immortalBtn        = document.getElementById('immortal-btn');
-  ui.immortalCost       = document.getElementById('immortal-cost');
   ui.golemBtn       = document.getElementById('golem-btn');
   ui.golemTimer     = document.getElementById('golem-timer');
   ui.dungeonBtn     = document.getElementById('dungeon-btn');
+  ui.menuBtn        = document.getElementById('menu-btn');
+  ui.endMenu        = document.getElementById('end-menu');
   ui.logList      = document.getElementById('log-list');
   ui.gameOver     = document.getElementById('game-over');
   ui.endTitle     = document.getElementById('end-title');
   ui.endText      = document.getElementById('end-text');
   ui.restart      = document.getElementById('restart');
   ui.waveBanner   = document.getElementById('wave-banner');
+
+  ui.immortalBtn        = document.getElementById('immortal-btn');
+  ui.immortalCost       = document.getElementById('immortal-cost');
 
   ui.summonBtn.addEventListener('click', summon);
   ui.rouletteBtn.addEventListener('click', roulette);
@@ -1437,12 +1432,14 @@ function setupUI() {
   ui.dungeonBtn.addEventListener('click', (e) => { e.stopPropagation(); sendToDungeon(); });
   ui.restart.addEventListener('click', restart);
 
-  const POPUP_KEYS = ['missions', 'recipes', 'dungeon', 'artifacts', 'achievements', 'difficulty'];
+  const POPUP_KEYS = ['missions', 'dungeon', 'artifacts'];
   for (const key of POPUP_KEYS) {
     ui[`${key}Toggle`].addEventListener('click', () => togglePopup(key));
     ui[`${key}Close`].addEventListener('click', () => setPopup(key, false));
   }
   ui.golemBtn.addEventListener('click', startGolem);
+  ui.menuBtn.addEventListener('click', backToMenu);
+  ui.endMenu.addEventListener('click', backToMenu);
   document.addEventListener('click', (e) => {
     for (const key of POPUP_KEYS) {
       const popup = ui[`${key}Popup`];
@@ -1493,11 +1490,6 @@ function updateUI() {
     ui.immortalBtn.disabled = game.gameOver || game.stones < IMMORTAL_ROULETTE_COST || !unlocked;
     ui.immortalBtn.classList.toggle('locked', !unlocked);
     ui.immortalBtn.title = unlocked ? '' : 'Acquire a Mythic guardian to unlock';
-  }
-  if (ui.difficultyLabel) {
-    const d = DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal;
-    ui.difficultyLabel.textContent = d.name;
-    ui.difficultyToggle.style.setProperty('--diff-color', d.color);
   }
   ui.upgCommon.disabled   = game.gold < upgradeCostFor('Common') || game.gameOver;
   ui.upgEpic.disabled     = game.gold < upgradeCostFor('Epic')   || game.gameOver;
@@ -1580,10 +1572,8 @@ function setPopup(key, open) {
   popup.hidden = !open;
   toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   if (open) {
-    if (key === 'artifacts')    renderArtifacts();
-    if (key === 'achievements') renderAchievements();
-    if (key === 'dungeon')      renderDungeon();
-    if (key === 'difficulty')   renderDifficulty();
+    if (key === 'artifacts') renderArtifacts();
+    if (key === 'dungeon')   renderDungeon();
   }
 }
 
@@ -1592,7 +1582,9 @@ function togglePopup(key) {
 }
 
 function renderRecipes() {
-  const rows = Object.entries(MYTHIC_RECIPES).map(([legId, mythId]) => {
+  const list = document.getElementById('welcome-recipes');
+  if (!list) return;
+  list.innerHTML = Object.entries(MYTHIC_RECIPES).map(([legId, mythId]) => {
     const a = UNITS[legId], b = UNITS[mythId];
     return `<li>
       <span class="recipe-from" style="color:${RARITY_COLORS[a.rarity]}">3× ${a.glyph} ${a.name}</span>
@@ -1600,11 +1592,6 @@ function renderRecipes() {
       <span class="recipe-to" style="color:${RARITY_COLORS[b.rarity]}">${b.glyph} ${b.name}</span>
     </li>`;
   }).join('');
-  ui.recipesBody.innerHTML = `
-    <p class="hint">Merge three identical Legendary guardians to forge a specific Mythic.</p>
-    <ul class="recipe-list">${rows}</ul>
-    <p class="hint">Common, Rare and Epic merges still roll randomly within their tier.</p>
-  `;
 }
 
 function renderDungeon() {
@@ -1690,38 +1677,32 @@ function renderArtifacts() {
 }
 
 function renderDifficulty() {
+  const container = document.getElementById('welcome-difficulty');
+  if (!container) return;
   const current = game.difficulty;
-  const rows = DIFFICULTY_ORDER.map(id => {
+  container.innerHTML = DIFFICULTY_ORDER.map(id => {
     const d = DIFFICULTIES[id];
     const active = id === current;
-    return `<li class="${active ? 'active' : ''}">
-      <button class="difficulty-row" data-difficulty="${id}" style="--diff-color:${d.color}" ${active ? 'aria-pressed="true"' : ''}>
-        <div class="diff-meta">
-          <div class="diff-name">${d.name}${active ? ' · current' : ''}</div>
-          <div class="diff-desc">${d.desc}</div>
-          <div class="diff-stats">HP ×${d.enemyHp.toFixed(1)} · Boss ×${d.bossHp.toFixed(1)} · Reward ×${d.reward.toFixed(2)} · Stun ×${d.stunMult.toFixed(1)}</div>
-        </div>
-      </button>
-    </li>`;
+    return `<button class="difficulty-card ${active ? 'active' : ''}" type="button" data-difficulty="${id}" style="--diff-color:${d.color}" ${active ? 'aria-pressed="true"' : ''}>
+      <div class="diff-name">${d.name}${active ? ' · selected' : ''}</div>
+      <div class="diff-desc">${d.desc}</div>
+      <div class="diff-stats">HP ×${d.enemyHp.toFixed(1)} · Boss ×${d.bossHp.toFixed(1)} · Reward ×${d.reward.toFixed(2)} · Stun ×${d.stunMult.toFixed(1)}</div>
+    </button>`;
   }).join('');
-  ui.difficultyBody.innerHTML = `
-    <p class="hint">Picking a difficulty restarts the run. Persisted across sessions.</p>
-    <ul class="difficulty-list">${rows}</ul>
-  `;
-  ui.difficultyBody.querySelectorAll('[data-difficulty]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
+  container.querySelectorAll('[data-difficulty]').forEach(btn => {
+    btn.addEventListener('click', () => {
       const id = btn.dataset.difficulty;
       if (id === game.difficulty) return;
       game.difficulty = id;
       saveProgress();
-      restart();
-      setPopup('difficulty', false);
+      renderDifficulty();
     });
   });
 }
 
 function renderAchievements() {
+  const container = document.getElementById('welcome-achievements');
+  if (!container) return;
   const got = Object.keys(game.achievements).filter(k => game.achievements[k]).length;
   const total = ACHIEVEMENTS.length;
   const rows = ACHIEVEMENTS.map(a => {
@@ -1734,28 +1715,11 @@ function renderAchievements() {
       </div>
     </li>`;
   }).join('');
-  ui.achievementsBody.innerHTML = `
-    <div class="ach-header">Unlocked <b>${got}</b> of ${total}</div>
-    <ul class="ach-list">${rows}</ul>
-    <button id="reset-progress" type="button" class="reset-btn">Reset progress</button>
-  `;
-  const resetBtn = ui.achievementsBody.querySelector('#reset-progress');
-  if (resetBtn) resetBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!confirm('Wipe all saved artifacts, achievements and stats?')) return;
-    localStorage.removeItem(STORAGE_KEY);
-    game.artifacts = { sb: 0, mg: 0 };
-    game.achievements = {};
-    game.stats = { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0 };
-    log('Progress reset.', 'danger');
-    renderArtifacts();
-    renderAchievements();
-    updateUI();
-  });
-  if (ui.achievementsCount) {
-    ui.achievementsCount.textContent = `${got}/${total}`;
-    ui.achievementsCount.classList.toggle('empty', got === 0);
-  }
+  container.innerHTML = `<ul class="ach-list">${rows}</ul>`;
+  const ach = document.getElementById('welcome-ach');
+  const sum = document.getElementById('welcome-ach-summary');
+  if (ach) ach.textContent = `${got}/${total}`;
+  if (sum) sum.textContent = `(${got}/${total})`;
 }
 
 function showBanner(text) {
@@ -1770,6 +1734,7 @@ function showBanner(text) {
 
 function endGame(victory) {
   game.gameOver = true;
+  game.runActive = false;
   game.victory = victory;
   ui.gameOver.hidden = false;
   ui.endTitle.textContent = victory ? 'Victory!' : 'Defeat';
@@ -1806,6 +1771,7 @@ function restart() {
   game.rings = [];
   game.shake = { time: 0, intensity: 0 };
   game.waveEscapes = 0;
+  game.runActive = true;
   // Artifacts, achievements, difficulty and cumulative stats persist across runs.
   ui.gameOver.hidden = true;
   ui.logList.innerHTML = '';
@@ -1823,6 +1789,59 @@ function restart() {
 }
 
 /* === Bootstrap === */
+/* === View system === */
+function showView(name) {
+  game.view = name;
+  document.getElementById('welcome-screen').hidden = name !== 'welcome';
+  document.getElementById('game-screen').hidden    = name !== 'game';
+  if (name === 'welcome') refreshWelcome();
+}
+
+function refreshWelcome() {
+  renderDifficulty();
+  renderRecipes();
+  renderAchievements();
+  const sb = document.getElementById('welcome-sb');
+  const mg = document.getElementById('welcome-mg');
+  if (sb) sb.textContent = game.artifacts.sb;
+  if (mg) mg.textContent = game.artifacts.mg;
+  const resumeBtn = document.getElementById('resume-run');
+  const startBtn  = document.getElementById('start-run');
+  const canResume = game.runActive && !game.gameOver;
+  if (resumeBtn) resumeBtn.hidden = !canResume;
+  if (startBtn)  startBtn.textContent = canResume ? 'Start New Run' : 'Start Run';
+}
+
+function startRunFromWelcome() {
+  restart();
+  game.runActive = true;
+  showView('game');
+}
+
+function resumeRun() { showView('game'); }
+
+function backToMenu() {
+  if (game.gameOver) game.runActive = false;
+  showView('welcome');
+}
+
+function resetAllProgress() {
+  if (!confirm('Wipe all saved artifacts, achievements and stats?')) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch {}
+  game.artifacts = { sb: 0, mg: 0 };
+  game.achievements = {};
+  game.stats = { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, recipesUsed: {} };
+  game.difficulty = 'normal';
+  refreshWelcome();
+}
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
 function init() {
   setupUI();
   const saved = loadSave();
@@ -1834,16 +1853,19 @@ function init() {
   }
   game.missions = makeMissions();
   renderMissions();
-  renderRecipes();
   renderDungeon();
   renderArtifacts();
-  renderAchievements();
   updateUI();
   log('Welcome to Copilot Defence!');
   if (game.artifacts.sb > 0 || game.artifacts.mg > 0) {
     log(`Artifacts active — Safe Box Lv ${game.artifacts.sb}, Money Gun Lv ${game.artifacts.mg}`, 'epic');
   }
-  log('Bugs invade the codebase every wave. Summon, merge, and defend.');
+  // Welcome screen wiring.
+  document.getElementById('start-run').addEventListener('click', startRunFromWelcome);
+  document.getElementById('resume-run').addEventListener('click', resumeRun);
+  document.getElementById('welcome-reset').addEventListener('click', resetAllProgress);
+  showView('welcome');
+  registerServiceWorker();
   game.lastTime = performance.now();
   requestAnimationFrame(gameLoop);
 }
