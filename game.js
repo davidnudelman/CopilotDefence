@@ -146,14 +146,18 @@ const MYTHIC_RECIPES = {
 const STORAGE_KEY = 'copilot-defence-save-v1';
 const ARTIFACT_MAX_LEVEL = 12;
 
+const SAFEBOX_RATE_PER_LEVEL = 0.015;
 const ARTIFACTS = {
   sb: {
     id: 'sb',
     name: 'Safe Box',
     glyph: '🏦',
-    desc: 'Generates passive gold each second. Scales with your current stockpile.',
-    rateAt: (lvl, gold) => lvl > 0 ? lvl * (1 + Math.sqrt(Math.max(0, gold) / 500)) : 0,
-    effectAt: (lvl, gold) => `+${ARTIFACTS.sb.rateAt(lvl, gold).toFixed(1)} g/s`,
+    desc: 'Pays interest at the start of each wave, as a small % of your gold at wave start.',
+    payoutAt: (lvl, waveStartGold) =>
+      lvl > 0 ? Math.floor(lvl * SAFEBOX_RATE_PER_LEVEL * Math.max(0, waveStartGold)) : 0,
+    effectAt: (lvl, gold) => lvl > 0
+      ? `+${Math.floor(lvl * SAFEBOX_RATE_PER_LEVEL * Math.max(0, gold))}g / wave (${(lvl * SAFEBOX_RATE_PER_LEVEL * 100).toFixed(1)}%)`
+      : '0g / wave',
     upgradeCost: (lvl) => 2 + lvl,
   },
   mg: {
@@ -265,6 +269,7 @@ const DUNGEON_BASE_HP = 320;
 const game = {
   canvas: null, ctx: null,
   gold: STARTING_GOLD,
+  waveStartGold: STARTING_GOLD,
   stones: 0,
   hp: STARTING_HP,
   wave: 1,
@@ -306,17 +311,17 @@ const ui = {};
 /* === Missions === */
 function makeMissions() {
   return [
-    { id: 'firstSummon',    text: 'Summon your first guardian', reward: { gold: 10 } },
-    { id: 'fiveCommons',    text: 'Have 5 Commons on board',    reward: { gold: 25 } },
+    { id: 'firstSummon',    text: 'Summon your first guardian', reward: { stones: 1 } },
+    { id: 'fiveCommons',    text: 'Have 5 Commons on board',    reward: { stones: 1 } },
     { id: 'firstMerge',     text: 'Merge 3 units',              reward: { stones: 1 } },
     { id: 'firstEpic',      text: 'Obtain an Epic unit',        reward: { stones: 1 } },
     { id: 'firstLegendary', text: 'Obtain a Legendary unit',    reward: { stones: 2 } },
-    { id: 'firstMythic',    text: 'Obtain a Mythic unit',       reward: { gold: 200, stones: 3 } },
-    { id: 'firstGolem',     text: 'Defeat a Golem',             reward: { gold: 50, stones: 1 } },
-    { id: 'firstDungeon',   text: 'Clear a Dungeon boss',       reward: { gold: 40, stones: 1 } },
+    { id: 'firstMythic',    text: 'Obtain a Mythic unit',       reward: { stones: 3 } },
+    { id: 'firstGolem',     text: 'Defeat a Golem',             reward: { stones: 1 } },
+    { id: 'firstDungeon',   text: 'Clear a Dungeon boss',       reward: { stones: 1 } },
     { id: 'beatBoss',       text: 'Defeat your first boss',     reward: { stones: 1 } },
-    { id: 'reachWave10',    text: 'Reach Wave 10',              reward: { gold: 60, stones: 2 } },
-    { id: 'reachWave30',    text: 'Reach Wave 30',              reward: { gold: 250, stones: 3 } },
+    { id: 'reachWave10',    text: 'Reach Wave 10',              reward: { stones: 2 } },
+    { id: 'reachWave30',    text: 'Reach Wave 30',              reward: { stones: 3 } },
   ].map(m => ({ ...m, done: false }));
 }
 
@@ -324,7 +329,6 @@ function completeMission(id) {
   const m = game.missions.find(x => x.id === id);
   if (!m || m.done) return;
   m.done = true;
-  if (m.reward.gold)   { game.gold   += m.reward.gold;   log(`Mission: ${m.text} (+${m.reward.gold}g)`, 'gold'); }
   if (m.reward.stones) { game.stones += m.reward.stones; log(`Mission: ${m.text} (+${m.reward.stones} stone${m.reward.stones>1?'s':''})`, 'stone'); }
   renderMissions();
 }
@@ -392,6 +396,12 @@ function makeEnemy(kind, wave) {
 
 function startWave() {
   if (game.waveRunning || game.gameOver) return;
+  game.waveStartGold = game.gold;
+  const interest = ARTIFACTS.sb.payoutAt(game.artifacts.sb, game.waveStartGold);
+  if (interest > 0) {
+    game.gold += interest;
+    log(`Safe Box interest (+${interest}g)`, 'gold');
+  }
   game.spawnQueue = buildWave(game.wave);
   game.spawnTimer = 0.4;
   game.waveRunning = true;
@@ -420,9 +430,7 @@ function updateWaveSpawning(dt) {
 function checkWaveComplete() {
   if (game.spawnQueue.length === 0 && game.enemies.length === 0) {
     game.waveRunning = false;
-    const bonus = 6 + Math.floor(game.wave * 1.2);
-    game.gold += bonus;
-    log(`Wave ${game.wave} cleared (+${bonus}g)`, 'gold');
+    log(`Wave ${game.wave} cleared`, 'gold');
     if (game.waveEscapes === 0) unlock('untouched');
     if (game.wave % 5 === 0) {
       game.stones += 1;
@@ -803,20 +811,14 @@ function recallFromDungeon(unit) {
 function updateDungeon(dt) {
   if (game.dungeon.units.length === 0) return;
   let dps = 0;
-  let lootPerSec = 0;
   for (const u of game.dungeon.units) {
     dps += dungeonDps(u);
-    const d = UNITS[u.id];
-    if (d.loot) lootPerSec += d.loot * 0.6;
   }
   game.dungeon.boss.hp -= dps * dt;
-  if (lootPerSec > 0) game.gold += lootPerSec * dt;
   if (game.dungeon.boss.hp <= 0) {
     const tier = game.dungeon.boss.tier;
-    const reward = 40 + 18 * tier;
-    game.gold += reward;
     game.dungeon.kills += 1;
-    log(`Dungeon boss T${tier} falls (+${reward}g)`, 'gold');
+    log(`Dungeon boss T${tier} falls`, 'gold');
     completeMission('firstDungeon');
     game.dungeon.boss.tier = tier + 1;
     const newHp = DUNGEON_BASE_HP * Math.pow(1.45, tier);
@@ -849,11 +851,6 @@ function upgrade(tier) {
 }
 
 /* === Artifacts === */
-function updateArtifactPassives(dt) {
-  const rate = ARTIFACTS.sb.rateAt(game.artifacts.sb, game.gold);
-  if (rate > 0) game.gold += rate * dt;
-}
-
 function upgradeArtifact(id) {
   const def = ARTIFACTS[id];
   if (!def) return;
@@ -1303,7 +1300,6 @@ function gameLoop(timestamp) {
     }
     updateGolem(dt);
     updateDungeon(dt);
-    updateArtifactPassives(dt);
     if (game.gold >= 5000) checkHoard();
     if (game.stones >= 30) unlock('stoneHoard');
     updateEffects(dt);
@@ -1574,10 +1570,7 @@ function renderUnitInfo() {
 
 function renderMissions() {
   ui.missionList.innerHTML = game.missions.map(m => {
-    const reward = [
-      m.reward.gold ? `+${m.reward.gold}g` : null,
-      m.reward.stones ? `+${m.reward.stones}🔷` : null,
-    ].filter(Boolean).join(' · ');
+    const reward = m.reward.stones ? `+${m.reward.stones}🔷` : '';
     return `<li class="${m.done ? 'done' : ''}"><span>${m.text}</span><span class="reward">${reward}</span></li>`;
   }).join('');
   const open = game.missions.filter(m => !m.done).length;
@@ -1643,15 +1636,14 @@ function renderRecipes() {
 function renderDungeon() {
   const boss = game.dungeon.boss;
   const totalDps = game.dungeon.units.reduce((s, u) => s + dungeonDps(u), 0);
-  const lootPerSec = game.dungeon.units.reduce((s, u) => s + (UNITS[u.id].loot || 0) * 0.6, 0);
   const unitsHtml = game.dungeon.units.length === 0
-    ? `<p class="hint">No guardians assigned. Open the inspector for an eligible unit (Rare or higher) and tap <b>Send to Dungeon</b>. Bandits also generate Loot gold/s here.</p>`
+    ? `<p class="hint">No guardians assigned. Open the inspector for an eligible unit (Rare or higher) and tap <b>Send to Dungeon</b>.</p>`
     : `<ul class="dungeon-units">${game.dungeon.units.map((u, i) => {
         const d = UNITS[u.id];
         return `<li>
           <span class="glyph" style="border-color:${RARITY_COLORS[d.rarity]}">${d.glyph}</span>
           <span class="name">${d.name}</span>
-          <span class="dps">${dungeonDps(u).toFixed(1)} dps${d.loot ? ` · +${(d.loot*0.6).toFixed(1)}g/s` : ''}</span>
+          <span class="dps">${dungeonDps(u).toFixed(1)} dps</span>
           <button data-recall="${i}" class="recall-btn" type="button">Recall</button>
         </li>`;
       }).join('')}</ul>`;
@@ -1667,7 +1659,6 @@ function renderDungeon() {
       <div class="boss-hp-bar"><div id="dungeon-hp-fill" style="width:${Math.max(0, boss.hp / boss.maxHp) * 100}%"></div></div>
       <div class="dungeon-stats">
         <span>${totalDps.toFixed(1)} total DPS</span>
-        <span>${lootPerSec ? `+${lootPerSec.toFixed(1)}g/s loot` : '—'}</span>
         <span>Cleared: ${game.dungeon.kills}</span>
       </div>
     </div>
@@ -1827,6 +1818,7 @@ function endGame(victory) {
 
 function restart() {
   game.gold = STARTING_GOLD;
+  game.waveStartGold = STARTING_GOLD;
   game.stones = 0;
   game.hp = STARTING_HP;
   game.wave = 1;
