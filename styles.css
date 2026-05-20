@@ -160,6 +160,57 @@ html, body {
 .diff-desc { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
 .diff-stats { color: var(--text-dim); font-size: 11px; margin-top: 4px; font-variant-numeric: tabular-nums; }
 
+#welcome-map {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+#welcome-map .hint {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.map-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 10px;
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+.map-card:hover:not(:disabled) { background: rgba(255,255,255,0.06); }
+.map-card:active:not(:disabled) { transform: translateY(1px); }
+.map-card.active {
+  background: rgba(255, 209, 102, 0.07);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.map-card:disabled { opacity: 0.5; cursor: not-allowed; }
+.map-preview {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  gap: 1px;
+  aspect-ratio: 10 / 6;
+  margin-bottom: 8px;
+  background: #2f4a3a;
+  padding: 3px;
+  border-radius: 6px;
+}
+.mp-cell {
+  background: rgba(255,255,255,0.04);
+  border-radius: 1px;
+}
+.mp-cell.path { background: #d9c79a; }
+.map-name { font-weight: 700; font-size: 13px; }
+.map-desc { color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
 .welcome-actions {
   display: flex;
   flex-direction: column;
