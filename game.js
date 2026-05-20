@@ -17,21 +17,70 @@ const SUMMON_COST_START = 8;
 const SUMMON_COST_STEP = 2;
 const SUMMON_COST_CAP = 80;
 
-/* === Path (winding road from left to right) === */
-const WAYPOINTS = [
-  { col: -1, row: 2 },
-  { col: 1,  row: 2 },
-  { col: 1,  row: 0 },
-  { col: 3,  row: 0 },
-  { col: 3,  row: 4 },
-  { col: 5,  row: 4 },
-  { col: 5,  row: 1 },
-  { col: 7,  row: 1 },
-  { col: 7,  row: 5 },
-  { col: 8,  row: 5 },
-  { col: 8,  row: 2 },
-  { col: 10, row: 2 },
-];
+/* === Map / path definitions ===
+ * Each map provides waypoints (from offscreen to offscreen) and a Golem cell
+ * that is guaranteed to sit off the path. WAYPOINTS / PATH_CELLS / GOLEM_CELL
+ * are mutable and updated by setMap(); the active map is chosen on the welcome
+ * screen and committed at run start.
+ */
+const MAPS = {
+  wind: {
+    id: 'wind',
+    name: 'Winding Path',
+    desc: 'The original winding route.',
+    waypoints: [
+      { col: -1, row: 2 }, { col: 1,  row: 2 },
+      { col: 1,  row: 0 }, { col: 3,  row: 0 },
+      { col: 3,  row: 4 }, { col: 5,  row: 4 },
+      { col: 5,  row: 1 }, { col: 7,  row: 1 },
+      { col: 7,  row: 5 }, { col: 8,  row: 5 },
+      { col: 8,  row: 2 }, { col: 10, row: 2 },
+    ],
+    golemCell: { col: 9, row: 4 },
+  },
+  zigzag: {
+    id: 'zigzag',
+    name: 'Zigzag',
+    desc: 'Sharp top-to-bottom switchbacks.',
+    waypoints: [
+      { col: -1, row: 0 }, { col: 2,  row: 0 },
+      { col: 2,  row: 5 }, { col: 4,  row: 5 },
+      { col: 4,  row: 0 }, { col: 6,  row: 0 },
+      { col: 6,  row: 5 }, { col: 8,  row: 5 },
+      { col: 8,  row: 2 }, { col: 10, row: 2 },
+    ],
+    golemCell: { col: 1, row: 2 },
+  },
+  loop: {
+    id: 'loop',
+    name: 'Loop',
+    desc: 'Long detour from bottom-left to top-right.',
+    waypoints: [
+      { col: -1, row: 5 }, { col: 1,  row: 5 },
+      { col: 1,  row: 1 }, { col: 4,  row: 1 },
+      { col: 4,  row: 4 }, { col: 6,  row: 4 },
+      { col: 6,  row: 2 }, { col: 9,  row: 2 },
+      { col: 9,  row: 0 }, { col: 10, row: 0 },
+    ],
+    golemCell: { col: 8, row: 5 },
+  },
+  snake: {
+    id: 'snake',
+    name: 'Snake',
+    desc: 'Doubles back near the spawn before sweeping right.',
+    waypoints: [
+      { col: -1, row: 1 }, { col: 3,  row: 1 },
+      { col: 3,  row: 4 }, { col: 1,  row: 4 },
+      { col: 1,  row: 5 }, { col: 6,  row: 5 },
+      { col: 6,  row: 2 }, { col: 9,  row: 2 },
+      { col: 9,  row: 4 }, { col: 10, row: 4 },
+    ],
+    golemCell: { col: 5, row: 0 },
+  },
+};
+const MAP_ORDER = ['wind', 'zigzag', 'loop', 'snake'];
+
+let WAYPOINTS = MAPS.wind.waypoints;
 
 const RARITY_ORDER = ['Common', 'Rare', 'Epic', 'Legendary', 'Mythic', 'Immortal'];
 
@@ -162,6 +211,7 @@ function saveProgress() {
       achievements: game.achievements,
       stats: game.stats,
       difficulty: game.difficulty,
+      mapId: game.mapId,
     }));
   } catch {}
 }
@@ -171,10 +221,10 @@ function cellCenter(col, row) {
   return { x: col * TILE + TILE / 2, y: row * TILE + TILE / 2 };
 }
 
-const PATH_CELLS = (() => {
+function computePathCells(waypoints) {
   const s = new Set();
-  for (let i = 0; i < WAYPOINTS.length - 1; i++) {
-    const a = WAYPOINTS[i], b = WAYPOINTS[i + 1];
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const a = waypoints[i], b = waypoints[i + 1];
     if (a.col === b.col) {
       const lo = Math.min(a.row, b.row), hi = Math.max(a.row, b.row);
       for (let r = lo; r <= hi; r++) s.add(`${a.col},${r}`);
@@ -184,7 +234,18 @@ const PATH_CELLS = (() => {
     }
   }
   return s;
-})();
+}
+
+let PATH_CELLS = computePathCells(WAYPOINTS);
+let GOLEM_CELL = MAPS.wind.golemCell;
+
+function setMap(id) {
+  const m = MAPS[id] || MAPS.wind;
+  WAYPOINTS = m.waypoints;
+  PATH_CELLS = computePathCells(WAYPOINTS);
+  GOLEM_CELL = m.golemCell;
+  game.mapId = m.id;
+}
 
 function positionAt(dist) {
   let remaining = dist;
@@ -236,6 +297,7 @@ const game = {
   achievements: {},
   stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, recipesUsed: {} },
   difficulty: 'normal',
+  mapId: 'wind',
   particles: [],
   rings: [],
   shake: { time: 0, intensity: 0 },
@@ -306,9 +368,9 @@ function spawnDelay(kind) {
 function makeEnemy(kind, wave) {
   const diff = DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal;
   const tuning = {
-    normal: { hp: 7  * Math.pow(1.062, wave - 1), speed: 82, size: 16, def: Math.floor(wave * 0.35), magicRes: 0, color: '#e25555', glyph: '🐛' },
-    elite:  { hp: 26 * Math.pow(1.072, wave - 1), speed: 66, size: 20, def: Math.floor(wave * 0.55), magicRes: 0, color: '#7a55c4', glyph: '💧' },
-    boss:   { hp: 75 * Math.pow(1.092, wave - 1), speed: 38, size: 28, def: Math.floor(wave * 0.65), magicRes: wave >= 50 ? 0.3 : 0, color: '#1a1a1a', glyph: '💀' },
+    normal: { hp: 8  * Math.pow(1.072, wave - 1), speed: 88, size: 16, def: Math.floor(wave * 0.45), magicRes: 0,                          color: '#e25555', glyph: '🐛' },
+    elite:  { hp: 30 * Math.pow(1.082, wave - 1), speed: 70, size: 20, def: Math.floor(wave * 0.65), magicRes: wave >= 40 ? 0.15 : 0,      color: '#7a55c4', glyph: '💧' },
+    boss:   { hp: 90 * Math.pow(1.100, wave - 1), speed: 42, size: 28, def: Math.floor(wave * 0.80), magicRes: wave >= 40 ? 0.25 : (wave >= 20 ? 0.10 : 0), color: '#1a1a1a', glyph: '💀' },
   }[kind];
   const hpMult = kind === 'boss' ? diff.bossHp : diff.enemyHp;
   const hp = tuning.hp * hpMult;
@@ -662,7 +724,6 @@ function sellSelected() {
 }
 
 /* === Golem === */
-const GOLEM_CELL = { col: 9, row: 4 };
 
 function startGolem() {
   if (!game.golem.ready || game.golem.active || game.gameOver) return;
@@ -1228,11 +1289,15 @@ function drawHoverCell(ctx) {
   const col = Math.floor(game.dragX / TILE);
   const row = Math.floor(game.dragY / TILE);
   if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return;
-  const valid = !PATH_CELLS.has(`${col},${row}`) &&
-    !game.units.some(x => x !== game.draggingUnit && x.col === col && x.row === row);
-  ctx.fillStyle = valid ? 'rgba(120, 220, 120, 0.18)' : 'rgba(220, 80, 80, 0.18)';
+  const onPath = PATH_CELLS.has(`${col},${row}`);
+  const occupant = !onPath && game.units.find(x => x !== game.draggingUnit && x.col === col && x.row === row);
+  let fill, stroke;
+  if (onPath)        { fill = 'rgba(220, 80, 80, 0.18)';  stroke = 'rgba(220, 80, 80, 0.8)'; }
+  else if (occupant) { fill = 'rgba(120, 180, 240, 0.22)'; stroke = 'rgba(120, 180, 240, 0.9)'; }
+  else               { fill = 'rgba(120, 220, 120, 0.18)'; stroke = 'rgba(120, 220, 120, 0.8)'; }
+  ctx.fillStyle = fill;
   ctx.fillRect(col * TILE, row * TILE, TILE, TILE);
-  ctx.strokeStyle = valid ? 'rgba(120, 220, 120, 0.8)' : 'rgba(220, 80, 80, 0.8)';
+  ctx.strokeStyle = stroke;
   ctx.lineWidth = 2;
   ctx.strokeRect(col * TILE + 1, row * TILE + 1, TILE - 2, TILE - 2);
 }
@@ -1348,10 +1413,17 @@ function onMouseUp(ev) {
   const row = Math.floor(p.y / TILE);
   const inside = col >= 0 && col < COLS && row >= 0 && row < ROWS;
   const onPath = inside && PATH_CELLS.has(`${col},${row}`);
-  const occupied = inside && game.units.some(x => x !== u && x.col === col && x.row === row);
-  if (inside && !onPath && !occupied) {
-    u.col = col;
-    u.row = row;
+  if (inside && !onPath) {
+    const other = game.units.find(x => x !== u && x.col === col && x.row === row);
+    if (other) {
+      // Swap positions with the occupant.
+      const oldCol = u.col, oldRow = u.row;
+      u.col = col;       u.row = row;
+      other.col = oldCol; other.row = oldRow;
+    } else {
+      u.col = col;
+      u.row = row;
+    }
   }
   game.draggingUnit = null;
   updateUI();
@@ -1584,7 +1656,10 @@ function renderMissions() {
 function isSheetOpen(el) { return !!el && el.classList.contains('open'); }
 
 function updateBackdrop() {
-  const open = ['missionsPopup', 'dungeonPopup', 'artifactsPopup', 'inspectorSheet']
+  // Inspector sheet is intentionally excluded so the map remains tappable
+  // while a unit is selected — the user can pick another unit or tap an
+  // empty tile to deselect without first dismissing the sheet.
+  const open = ['missionsPopup', 'dungeonPopup', 'artifactsPopup']
     .some(k => isSheetOpen(ui[k]));
   ui.sheetBackdrop.classList.toggle('open', open);
 }
@@ -1739,6 +1814,37 @@ function renderDifficulty() {
   });
 }
 
+function renderMaps() {
+  const container = document.getElementById('welcome-map');
+  if (!container) return;
+  const resuming = game.runActive && !game.gameOver;
+  container.innerHTML = MAP_ORDER.map(id => {
+    const m = MAPS[id];
+    const active = id === game.mapId;
+    const pathSet = computePathCells(m.waypoints);
+    let cells = '';
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        cells += `<span class="mp-cell ${pathSet.has(`${c},${r}`) ? 'path' : ''}"></span>`;
+      }
+    }
+    return `<button class="map-card ${active ? 'active' : ''}" type="button" data-map="${id}" ${active ? 'aria-pressed="true"' : ''}>
+      <div class="map-preview">${cells}</div>
+      <div class="map-name">${m.name}${active ? ' · selected' : ''}</div>
+      <div class="map-desc">${m.desc}</div>
+    </button>`;
+  }).join('') + (resuming ? '<p class="hint">Map change applies on your next new run; the resumed run keeps its current path.</p>' : '');
+  container.querySelectorAll('[data-map]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.map;
+      if (id === game.mapId) return;
+      game.mapId = id;
+      saveProgress();
+      renderMaps();
+    });
+  });
+}
+
 function renderAchievements() {
   const container = document.getElementById('welcome-achievements');
   if (!container) return;
@@ -1813,6 +1919,8 @@ function restart() {
   game.shake = { time: 0, intensity: 0 };
   game.waveEscapes = 0;
   game.runActive = true;
+  // Commit the map chosen on the welcome screen for this run.
+  setMap(game.mapId);
   // Artifacts, achievements, difficulty and cumulative stats persist across runs.
   ui.gameOver.hidden = true;
   ui.logList.innerHTML = '';
@@ -1840,6 +1948,7 @@ function showView(name) {
 
 function refreshWelcome() {
   renderDifficulty();
+  renderMaps();
   renderRecipes();
   renderAchievements();
   const sb = document.getElementById('welcome-sb');
@@ -1893,7 +2002,9 @@ function init() {
     if (saved.achievements) game.achievements = saved.achievements;
     if (saved.stats)        game.stats        = Object.assign(game.stats, saved.stats);
     if (saved.difficulty && DIFFICULTIES[saved.difficulty]) game.difficulty = saved.difficulty;
+    if (saved.mapId && MAPS[saved.mapId]) game.mapId = saved.mapId;
   }
+  setMap(game.mapId);
   game.missions = makeMissions();
   renderMissions();
   renderDungeon();
