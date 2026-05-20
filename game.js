@@ -14,14 +14,15 @@ const MAX_WAVES = 80;
 const STARTING_GOLD = 60;
 const STARTING_HP = 20;
 const SUMMON_COST_START = 8;
-const SUMMON_COST_STEP = 2;
+const SUMMON_COST_STEP = 5;
 const SUMMON_COST_CAP = 80;
+const WAVE_AUTO_DELAY = 4;
+const WAVE_FIRST_DELAY = 2;
 
 /* === Map / path definitions ===
- * Each map provides waypoints (from offscreen to offscreen) and a Golem cell
- * that is guaranteed to sit off the path. WAYPOINTS / PATH_CELLS / GOLEM_CELL
- * are mutable and updated by setMap(); the active map is chosen on the welcome
- * screen and committed at run start.
+ * Each map provides waypoints (from offscreen to offscreen). WAYPOINTS and
+ * PATH_CELLS are mutable and updated by setMap(); the active map is chosen on
+ * the welcome screen and committed at run start.
  */
 const MAPS = {
   wind: {
@@ -36,7 +37,6 @@ const MAPS = {
       { col: 7,  row: 5 }, { col: 8,  row: 5 },
       { col: 8,  row: 2 }, { col: 10, row: 2 },
     ],
-    golemCell: { col: 9, row: 4 },
   },
   zigzag: {
     id: 'zigzag',
@@ -49,7 +49,6 @@ const MAPS = {
       { col: 6,  row: 5 }, { col: 8,  row: 5 },
       { col: 8,  row: 2 }, { col: 10, row: 2 },
     ],
-    golemCell: { col: 1, row: 2 },
   },
   loop: {
     id: 'loop',
@@ -62,7 +61,6 @@ const MAPS = {
       { col: 6,  row: 2 }, { col: 9,  row: 2 },
       { col: 9,  row: 0 }, { col: 10, row: 0 },
     ],
-    golemCell: { col: 8, row: 5 },
   },
   snake: {
     id: 'snake',
@@ -75,7 +73,6 @@ const MAPS = {
       { col: 6,  row: 2 }, { col: 9,  row: 2 },
       { col: 9,  row: 4 }, { col: 10, row: 4 },
     ],
-    golemCell: { col: 5, row: 0 },
   },
 };
 const MAP_ORDER = ['wind', 'zigzag', 'loop', 'snake'];
@@ -237,13 +234,11 @@ function computePathCells(waypoints) {
 }
 
 let PATH_CELLS = computePathCells(WAYPOINTS);
-let GOLEM_CELL = MAPS.wind.golemCell;
 
 function setMap(id) {
   const m = MAPS[id] || MAPS.wind;
   WAYPOINTS = m.waypoints;
   PATH_CELLS = computePathCells(WAYPOINTS);
-  GOLEM_CELL = m.golemCell;
   game.mapId = m.id;
 }
 
@@ -265,7 +260,6 @@ function positionAt(dist) {
 
 /* === Game state === */
 const GOLEM_COOLDOWN = 45;
-const GOLEM_TIMEOUT  = 25;
 const DUNGEON_BASE_HP = 320;
 
 const game = {
@@ -282,6 +276,7 @@ const game = {
   spawnQueue: [],
   spawnTimer: 0,
   waveRunning: false,
+  nextWaveDelay: null,
   speed: 1,
   selectedUnit: null,
   draggingUnit: null,
@@ -291,7 +286,7 @@ const game = {
   gameOver: false,
   victory: false,
   lastTime: 0,
-  golem: { cooldown: GOLEM_COOLDOWN, ready: false, active: false, timer: 0, kills: 0 },
+  golem: { cooldown: GOLEM_COOLDOWN, active: false, kills: 0 },
   dungeon: { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1 }, kills: 0 },
   artifacts: { sb: 0, mg: 0 },
   achievements: {},
@@ -441,6 +436,7 @@ function checkWaveComplete() {
     if (game.wave === 30 && game.difficulty === 'hard') unlock('hardClear');
     if (game.wave >= MAX_WAVES) { endGame(true); return; }
     game.wave++;
+    game.nextWaveDelay = WAVE_AUTO_DELAY;
     saveProgress();
     updateUI();
   }
@@ -454,7 +450,6 @@ function updateEnemies(dt) {
     if (e.slowTimer > 0) { e.slowTimer = Math.max(0, e.slowTimer - dt); if (e.slowTimer === 0) e.slowAmount = 0; }
     if (e.defDownTimer > 0) { e.defDownTimer = Math.max(0, e.defDownTimer - dt); if (e.defDownTimer === 0) e.defDownAmount = 0; }
 
-    if (e.stationary) continue;
     if (e.entryTimer > 0) { e.entryTimer = Math.max(0, e.entryTimer - dt); continue; }
 
     let speed = e.baseSpeed;
@@ -467,10 +462,14 @@ function updateEnemies(dt) {
     if (pos.done) {
       e.escaped = true;
       game.waveEscapes++;
-      const dmg = e.kind === 'boss' ? 5 : e.kind === 'elite' ? 2 : 1;
+      const dmg = e.kind === 'boss' ? 5 : e.kind === 'golem' ? 3 : e.kind === 'elite' ? 2 : 1;
       game.hp -= dmg;
       triggerShake(4 + dmg, 0.25);
       log(`Escape! ${e.glyph} reached the base (-${dmg} HP)`, 'danger');
+      if (e.kind === 'golem') {
+        game.golem.active = false;
+        game.golem.cooldown = GOLEM_COOLDOWN;
+      }
       if (game.hp <= 0) { game.hp = 0; endGame(false); }
     }
   }
@@ -725,81 +724,39 @@ function sellSelected() {
 
 /* === Golem === */
 
-function startGolem() {
-  if (!game.golem.ready || game.golem.active || game.gameOver) return;
-  triggerShake(7, 0.35);
+function spawnGolem() {
+  if (game.golem.active || game.gameOver) return;
   const wave = game.wave;
   const hp = 110 * Math.pow(1.08, wave - 1);
-  const c = cellCenter(GOLEM_CELL.col, GOLEM_CELL.row);
+  const p = positionAt(0);
   game.enemies.push({
     kind: 'golem',
-    stationary: true,
     maxHp: hp, hp,
-    baseSpeed: 0,
+    baseSpeed: 48,
     size: 24,
     def: Math.floor(wave * 0.55),
     magicRes: 0,
     color: '#6c5a3e',
     glyph: '🗿',
-    pathDist: 0, x: c.x, y: c.y,
+    pathDist: 0, x: p.x, y: p.y,
     stunTimer: 0, slowTimer: 0, slowAmount: 0,
     defDownTimer: 0, defDownAmount: 0,
     dead: false, escaped: false,
-    expireTimer: GOLEM_TIMEOUT,
+    entryTimer: 0.6,
   });
-  game.golem.ready = false;
   game.golem.active = true;
-  game.golem.timer = GOLEM_TIMEOUT;
-  log('A Golem appears! Engage before it vanishes.', 'epic');
+  triggerShake(7, 0.35);
+  spawnRing(p.x, p.y, 80, '#d2a76a', 0.6, 3);
+  spawnParticleBurst(p.x, p.y, '#d2a76a', 18);
+  log('A Golem lumbers onto the path!', 'epic');
   updateUI();
 }
 
 function updateGolem(dt) {
-  if (game.golem.active) {
-    game.golem.timer -= dt;
-    const g = game.enemies.find(e => e.kind === 'golem');
-    if (g) g.expireTimer = game.golem.timer;
-    if (game.golem.timer <= 0) {
-      if (g) g.escaped = true;
-      game.golem.active = false;
-      game.golem.cooldown = GOLEM_COOLDOWN;
-      log('Golem retreated into the noise.', 'danger');
-      updateUI();
-    }
-    return;
-  }
-  if (!game.golem.ready) {
-    game.golem.cooldown -= dt;
-    if (game.golem.cooldown <= 0) {
-      game.golem.ready = true;
-      log('A Golem stirs in the logs…', 'stone');
-      updateUI();
-    }
-  }
-}
-
-function attackStationary(dt) {
-  for (const u of game.units) {
-    if (u.cooldown > 0) continue;
-    const d = UNITS[u.id];
-    const c = cellCenter(u.col, u.row);
-    const rangePx = d.range * TILE;
-    let target = null, best = Infinity;
-    for (const e of game.enemies) {
-      if (!e.stationary || e.dead || e.escaped) continue;
-      const dist = Math.hypot(e.x - c.x, e.y - c.y);
-      if (dist <= rangePx && dist < best) { best = dist; target = e; }
-    }
-    if (!target) continue;
-    let dmg = unitDamage(u);
-    if (d.percentHP) dmg += target.maxHp * d.percentHP;
-    damageEnemy(target, dmg, d.type, u);
-    game.beams.push({
-      x1: c.x, y1: c.y, x2: target.x, y2: target.y,
-      life: 0.14, color: d.type === 'magic' ? '#9bd9ff' : '#ffd166',
-    });
-    u.cooldown = 1 / d.aps;
-    u.flash = 0.1;
+  if (game.golem.active) return;
+  game.golem.cooldown -= dt;
+  if (game.golem.cooldown <= 0) {
+    spawnGolem();
   }
 }
 
@@ -1333,14 +1290,16 @@ function gameLoop(timestamp) {
   game.lastTime = timestamp;
 
   if (game.view === 'game' && !game.gameOver) {
-    if (game.waveRunning) {
-      updateWaveSpawning(dt);
-      updateEnemies(dt);
-      updateUnits(dt);
-      checkWaveComplete();
-    } else if (game.golem.active) {
-      updateEnemies(dt);
-      attackStationary(dt);
+    if (game.waveRunning) updateWaveSpawning(dt);
+    updateEnemies(dt);
+    updateUnits(dt);
+    if (game.waveRunning) checkWaveComplete();
+    if (!game.waveRunning && game.nextWaveDelay !== null) {
+      game.nextWaveDelay -= dt;
+      if (game.nextWaveDelay <= 0) {
+        game.nextWaveDelay = null;
+        startWave();
+      }
     }
     updateGolem(dt);
     updateDungeon(dt);
@@ -1352,9 +1311,6 @@ function gameLoop(timestamp) {
     ui.gold.textContent = Math.floor(game.gold);
     ui.stones.textContent = game.stones;
     ui.hp.textContent = game.hp;
-    if (game.golem.active && ui.golemTimer) {
-      ui.golemTimer.textContent = `${Math.max(0, Math.ceil(game.golem.timer))}s`;
-    }
   }
   if (game.view === 'game') draw();
   requestAnimationFrame(gameLoop);
@@ -1453,7 +1409,6 @@ function setupUI() {
   ui.upgEpicCost  = document.getElementById('upg-epic-cost');
   ui.upgMythicCost= document.getElementById('upg-mythic-cost');
   ui.speedBtn     = document.getElementById('speed-btn');
-  ui.waveBtn      = document.getElementById('wave-btn');
   ui.unitInfo     = document.getElementById('unit-info-body');
   ui.unitActions  = document.getElementById('unit-actions');
   ui.sellBtn      = document.getElementById('sell-btn');
@@ -1476,8 +1431,6 @@ function setupUI() {
   ui.artifactsPopup  = document.getElementById('artifacts-popup');
   ui.artifactsClose  = document.getElementById('artifacts-close');
   ui.artifactsBody   = document.getElementById('artifacts-body');
-  ui.golemBtn       = document.getElementById('golem-btn');
-  ui.golemTimer     = document.getElementById('golem-timer');
   ui.dungeonBtn     = document.getElementById('dungeon-btn');
   ui.menuBtn        = document.getElementById('menu-btn');
   ui.endMenu        = document.getElementById('end-menu');
@@ -1501,7 +1454,6 @@ function setupUI() {
   ui.upgEpic.addEventListener('click',   () => upgrade('Epic'));
   ui.upgMythic.addEventListener('click', () => upgrade('Mythic'));
   ui.speedBtn.addEventListener('click', toggleSpeed);
-  ui.waveBtn.addEventListener('click', startWave);
   ui.sellBtn.addEventListener('click', sellSelected);
   ui.mergeBtn.addEventListener('click', mergeSelected);
   ui.dungeonBtn.addEventListener('click', (e) => { e.stopPropagation(); sendToDungeon(); });
@@ -1512,7 +1464,6 @@ function setupUI() {
     ui[`${key}Toggle`].addEventListener('click', () => togglePopup(key));
     ui[`${key}Close`].addEventListener('click', () => setPopup(key, false));
   }
-  ui.golemBtn.addEventListener('click', startGolem);
   ui.menuBtn.addEventListener('click', backToMenu);
   ui.endMenu.addEventListener('click', backToMenu);
   ui.inspectorClose.addEventListener('click', () => {
@@ -1537,7 +1488,6 @@ function setupUI() {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === 's' || e.key === 'S') summon();
     else if (e.key === 'r' || e.key === 'R') roulette();
-    else if (e.key === ' ') { e.preventDefault(); startWave(); }
     else if (e.key === 'm' || e.key === 'M') mergeSelected();
     else if (e.key === 'x' || e.key === 'X') sellSelected();
     else if (e.key === '1' || e.key === '2' || e.key === '3') {
@@ -1568,24 +1518,6 @@ function updateUI() {
   ui.upgCommon.disabled   = game.gold < upgradeCostFor('Common') || game.gameOver;
   ui.upgEpic.disabled     = game.gold < upgradeCostFor('Epic')   || game.gameOver;
   ui.upgMythic.disabled   = game.gold < upgradeCostFor('Mythic') || game.gameOver;
-  ui.waveBtn.disabled     = game.waveRunning || game.gameOver;
-  ui.waveBtn.textContent  = game.waveRunning ? 'In Progress…' : `Start Wave ${game.wave}`;
-  ui.waveBtn.classList.toggle('running', game.waveRunning);
-  // Golem button visibility: only visible when a golem is ready or active.
-  if ((game.golem.ready || game.golem.active) && !game.gameOver) {
-    ui.golemBtn.hidden = false;
-    if (game.golem.active) {
-      ui.golemBtn.classList.add('active');
-      ui.golemBtn.disabled = true;
-      ui.golemTimer.textContent = `${Math.max(0, Math.ceil(game.golem.timer))}s`;
-    } else {
-      ui.golemBtn.classList.remove('active');
-      ui.golemBtn.disabled = game.gameOver;
-      ui.golemTimer.textContent = 'ready';
-    }
-  } else {
-    ui.golemBtn.hidden = true;
-  }
   if (ui.artifactsPopup && ui.artifactsPopup.classList.contains('open')) renderArtifacts();
   renderUnitInfo();
 }
@@ -1906,13 +1838,14 @@ function restart() {
   game.spawnQueue = [];
   game.spawnTimer = 0;
   game.waveRunning = false;
+  game.nextWaveDelay = WAVE_FIRST_DELAY;
   game.selectedUnit = null;
   game.draggingUnit = null;
   game.upgrades = { Common: 0, Epic: 0, Mythic: 0 };
   game.gameOver = false;
   game.victory = false;
   game.missions = makeMissions();
-  game.golem = { cooldown: GOLEM_COOLDOWN, ready: false, active: false, timer: 0, kills: 0 };
+  game.golem = { cooldown: GOLEM_COOLDOWN, active: false, kills: 0 };
   game.dungeon = { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1 }, kills: 0 };
   game.particles = [];
   game.rings = [];
