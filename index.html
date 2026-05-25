@@ -63,15 +63,15 @@
             </ul>
           </section>
           <section>
-            <h3>Mythic Recipes</h3>
-            <ul id="welcome-recipes" class="recipe-list"></ul>
+            <h3>Families</h3>
+            <ul id="welcome-families" class="family-list"></ul>
           </section>
           <section>
             <h3>Controls</h3>
             <ul class="kbd-list">
               <li><kbd>S</kbd> Summon</li>
-              <li><kbd>R</kbd> Epic Roulette</li>
-              <li><kbd>Space</kbd> Start Wave</li>
+              <li><kbd>R</kbd> Epic Roulette (60%, 1🔷)</li>
+              <li><kbd>L</kbd> Legendary Roulette (30%, 4🔷)</li>
               <li><kbd>M</kbd> Merge</li>
               <li><kbd>X</kbd> Sell</li>
               <li><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> Speed</li>
@@ -81,10 +81,11 @@
           <section>
             <h3>Tips</h3>
             <ul class="tips-list">
-              <li>Three identical units merge into the next rarity. Legendary merges follow set recipes.</li>
-              <li>Safe Box pays interest at the start of each wave — a small % of your gold at wave start. Money Gun amplifies ATK.</li>
-              <li>Send Rare+ units to the Dungeon to clear bosses for Luck Stones.</li>
-              <li>Engage the Golem when it appears for bonus gold and Luck Stones.</li>
+              <li>Three identical units of the same family merge into the next tier within that family — deterministic.</li>
+              <li>Mythics &amp; Immortals can only be reached by merging — there's no roulette for them.</li>
+              <li>Mythic units charge a Mana ring with each attack. Park them near a Mana Catalyst (Arcane Epic) to charge faster.</li>
+              <li>Safe Box pays a small % of your wave-start gold (capped). Money Gun amplifies ATK based on your pile.</li>
+              <li>Send Rare+ units to the Dungeon to grind extra Luck Stones over time.</li>
             </ul>
           </section>
         </div>
@@ -156,12 +157,12 @@
           <span class="btn-cost"><span id="summon-cost">8</span>g</span>
         </button>
         <button id="roulette-btn" class="secondary">
-          <span class="btn-label">Epic</span>
-          <span class="btn-cost">1🔷</span>
+          <span class="btn-label">Epic 60%</span>
+          <span class="btn-cost"><span id="roulette-cost">1</span>🔷</span>
         </button>
-        <button id="immortal-btn" class="immortal">
-          <span class="btn-label">Immortal</span>
-          <span class="btn-cost"><span id="immortal-cost">8</span>🔷</span>
+        <button id="legendary-btn" class="legendary">
+          <span class="btn-label">Legend 30%</span>
+          <span class="btn-cost"><span id="legendary-cost">4</span>🔷</span>
         </button>
         <button id="upg-common" class="upgrade">
           <span class="btn-label">+C dmg</span>
