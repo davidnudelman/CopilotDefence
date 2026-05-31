@@ -178,6 +178,26 @@ const ABILITY_DESCRIPTIONS = {
   starfall:       'Every full mana: starfall over all enemies in range.',
 };
 
+/* === Family signature specials ===
+ * Every unit — not just Mythics — fires its family signature every N attacks.
+ * The cadence tightens as rarity rises, so higher tiers proc more often; the
+ * signature's power rides on unitDamage(), which already scales with rarity.
+ * Mythic/Immortal keep their mana ultimate AND fire the signature on top. */
+const SIGNATURE_CADENCE = { Common: 8, Rare: 7, Epic: 6, Legendary: 5, Mythic: 4, Immortal: 3 };
+
+const SIGNATURE = {
+  frost:   { name: 'Frost Nova',      glyph: '❄', color: '#9bd9ff',
+             desc: r => `Nova hits nearby enemies and ${r === 'Common' || r === 'Rare' ? 'deep-slows' : 'freezes'} them.` },
+  burn:    { name: 'Ember Burst',     glyph: '🔥', color: '#ff7e3a',
+             desc: () => 'Splash blast that leaves a stronger, longer burn.' },
+  sniper:  { name: 'Piercing Volley', glyph: '🎯', color: '#a8e055',
+             desc: r => `Strong shot pierces ${r === 'Common' || r === 'Rare' ? 1 : (r === 'Epic' || r === 'Legendary' ? 2 : 3)} extra enemies.` },
+  bruiser: { name: 'Crushing Slam',   glyph: '💥', color: '#ff7e7e',
+             desc: () => 'Devastating single hit + bonus % max HP and a brief stun.' },
+  arcane:  { name: 'Mana Surge',      glyph: '✨', color: '#b06bf0',
+             desc: () => 'Pours mana into nearby charging allies and zaps the target.' },
+};
+
 /* Roulette costs/odds — premium tiers above Legendary require merges. */
 const EPIC_ROULETTE_COST       = 1;
 const EPIC_ROULETTE_CHANCE     = 0.60;   // 60% Epic, otherwise random Rare
@@ -715,6 +735,13 @@ function updateUnits(dt) {
       }
     }
 
+    // Family signature — charges every N attacks (N shrinks with rarity).
+    u.atkCount = (u.atkCount || 0) + 1;
+    if (u.atkCount >= (SIGNATURE_CADENCE[d.rarity] || 8)) {
+      u.atkCount = 0;
+      triggerSignature(u, target, c);
+    }
+
     u.cooldown = 1 / d.aps;
     u.flash = 0.1;
   }
@@ -817,6 +844,111 @@ function triggerAbility(u, target, c) {
   unlock('ability');
 }
 
+/* === Family signatures (every unit, charged by attack count) === */
+function triggerSignature(u, target, c) {
+  const d = UNITS[u.id];
+  const sig = SIGNATURE[d.family];
+  if (!sig) return;
+  const stunMult = (DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal).stunMult;
+  const rarityCls = d.rarity.toLowerCase();
+  switch (d.family) {
+    case 'frost': {
+      // Nova around the caster: deep-slow at low tiers, true freeze at Epic+.
+      const r = d.range * 0.7 * TILE;
+      const freeze = d.rarity !== 'Common' && d.rarity !== 'Rare';
+      const freezeDur = d.rarity === 'Epic' ? 0.6 : d.rarity === 'Legendary' ? 1.0 : 1.4;
+      spawnRing(c.x, c.y, r, sig.color, 0.6, 4);
+      spawnParticleBurst(c.x, c.y, sig.color, 14);
+      for (const e of game.enemies) {
+        if (e.dead || e.escaped) continue;
+        if (Math.hypot(e.x - c.x, e.y - c.y) > r) continue;
+        damageEnemy(e, unitDamage(u) * 0.8, 'magic', u);
+        if (e.dead) continue;
+        if (freeze) {
+          applyFreeze(e, freezeDur * stunMult);
+        } else {
+          const fresh = e.slowTimer <= 0;
+          e.slowAmount = Math.max(e.slowAmount, 0.70);
+          e.slowTimer  = Math.max(e.slowTimer, 1.2);
+          if (fresh) spawnSlowFlakes(e.x, e.y - e.size);
+        }
+      }
+      log(`❄ ${d.name} unleashes Frost Nova!`, rarityCls);
+      break;
+    }
+    case 'burn': {
+      // Splash at the target leaving a stronger, longer burn.
+      const cx = target ? target.x : c.x, cy = target ? target.y : c.y;
+      const r = 0.9 * TILE;
+      const dps = (d.burn ? d.burn.dps : Math.max(2, unitDamage(u) * 0.15)) * 2;
+      const dur = (d.burn ? d.burn.duration : 2.0) + 2.5;
+      spawnRing(cx, cy, r, sig.color, 0.55, 4);
+      spawnParticleBurst(cx, cy, sig.color, 16);
+      for (const e of game.enemies) {
+        if (e.dead || e.escaped) continue;
+        if (Math.hypot(e.x - cx, e.y - cy) > r) continue;
+        damageEnemy(e, unitDamage(u) * 1.1, 'magic', u);
+        if (!e.dead) applyBurn(e, dps, dur, u, 'magic');
+      }
+      log(`🔥 ${d.name} erupts in an Ember Burst!`, rarityCls);
+      break;
+    }
+    case 'sniper': {
+      // Strong shot piercing K extra enemies in range.
+      const k = d.rarity === 'Common' || d.rarity === 'Rare' ? 1
+              : d.rarity === 'Epic' || d.rarity === 'Legendary' ? 2 : 3;
+      const r = d.range * TILE;
+      const pool = game.enemies.filter(e => !e.dead && !e.escaped && e !== target &&
+        Math.hypot(e.x - c.x, e.y - c.y) <= r);
+      for (let i = 0; i < k && pool.length; i++) {
+        const idx = Math.floor(Math.random() * pool.length);
+        const e = pool.splice(idx, 1)[0];
+        damageEnemy(e, unitDamage(u) * 1.3, 'physical', u);
+        game.beams.push({ x1: c.x, y1: c.y, x2: e.x, y2: e.y, life: 0.18, color: sig.color });
+        spawnParticleBurst(e.x, e.y, sig.color, 5);
+      }
+      log(`🎯 ${d.name} fires a Piercing Volley!`, rarityCls);
+      break;
+    }
+    case 'bruiser': {
+      // Single devastating hit + bonus % max HP and a brief stun.
+      if (target && !target.dead) {
+        damageEnemy(target, unitDamage(u) * 3.5 + target.maxHp * 0.04, 'physical', u);
+        if (!target.dead) {
+          if (target.stunTimer <= 0) noteStun();
+          target.stunTimer = Math.max(target.stunTimer, 0.5 * stunMult);
+          spawnStunSparks(target.x, target.y - target.size);
+        }
+        triggerShake(4, 0.2);
+        spawnParticleBurst(target.x, target.y, '#ffd166', 16);
+        log(`💥 ${d.name} lands a Crushing Slam!`, rarityCls);
+      }
+      break;
+    }
+    case 'arcane': {
+      // Pour mana into nearby charging allies and zap the target.
+      const r = 2.4 * TILE;
+      let buffed = 0;
+      for (const ally of game.units) {
+        if (ally === u) continue;
+        const ad = UNITS[ally.id];
+        if (!ad.manaMax) continue;
+        const ac = cellCenter(ally.col, ally.row);
+        if (Math.hypot(c.x - ac.x, c.y - ac.y) > r) continue;
+        ally.mana = Math.min(ad.manaMax, (ally.mana || 0) + 2);
+        game.beams.push({ x1: c.x, y1: c.y, x2: ac.x, y2: ac.y, life: 0.22, color: sig.color });
+        spawnParticleBurst(ac.x, ac.y, sig.color, 6);
+        buffed++;
+      }
+      spawnRing(c.x, c.y, r, sig.color, 0.6, 3);
+      if (target && !target.dead) damageEnemy(target, unitDamage(u) * 1.2, 'magic', u);
+      log(`✨ ${d.name} channels a Mana Surge${buffed ? ` (+${buffed})` : ''}!`, rarityCls);
+      break;
+    }
+  }
+  unlock('ability');
+}
+
 function findEmptyCell() {
   const choices = [];
   for (let r = 0; r < ROWS; r++) {
@@ -831,7 +963,7 @@ function findEmptyCell() {
 }
 
 function spawnUnit(id, col, row) {
-  const u = { id, col, row, cooldown: 0, flash: 0, mana: 0 };
+  const u = { id, col, row, cooldown: 0, flash: 0, mana: 0, atkCount: 0 };
   game.units.push(u);
   const d = UNITS[id];
   log(`Summoned ${d.name}`, d.rarity.toLowerCase());
@@ -1336,7 +1468,21 @@ function drawUnitAt(ctx, u, x, y, ghost = false) {
     ctx.beginPath();
     ctx.arc(x, y, 19, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
     ctx.stroke();
-  } else if (d.manaAura) {
+  }
+  // signature charge ring (outer arc) — every unit fills this every N attacks.
+  {
+    const sig = SIGNATURE[d.family];
+    const cadence = SIGNATURE_CADENCE[d.rarity] || 8;
+    if (sig) {
+      const sfrac = Math.min(1, (u.atkCount || 0) / cadence);
+      ctx.strokeStyle = sfrac >= 1 ? '#ffffff' : `${sig.color}66`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, 23, -Math.PI / 2, -Math.PI / 2 + sfrac * Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  if (d.manaAura) {
     // Catalyst aura indicator — pulsing ring at the aura radius.
     const t = performance.now() / 700;
     const pulse = 0.5 + 0.5 * Math.sin(t);
@@ -1772,6 +1918,9 @@ function renderUnitInfo() {
   const dps = dmg * d.aps;
   const fam = FAMILIES[d.family];
   const abilityText = ABILITY_DESCRIPTIONS[d.ability] || '';
+  const sig = SIGNATURE[d.family];
+  const sigCadence = SIGNATURE_CADENCE[d.rarity] || 8;
+  const sigText = sig ? `${sig.name} — ${sig.desc(d.rarity)} (every ${sigCadence} attacks)` : '';
   ui.unitInfo.innerHTML = `
     <div class="unit-card">
       <div class="glyph" style="border-color: ${RARITY_COLORS[d.rarity]}">${d.glyph}</div>
@@ -1794,6 +1943,7 @@ function renderUnitInfo() {
       ${d.defDown      ? `<tr><td class="k">DEF down</td><td class="v">-${(d.defDown.amount*100).toFixed(0)}% / ${d.defDown.duration}s</td></tr>` : ''}
       ${d.manaAura     ? `<tr><td class="k">Mana aura</td><td class="v">+1 mana / ally attack within ${d.manaAura} tiles</td></tr>` : ''}
       ${d.manaMax      ? `<tr><td class="k">Mana</td><td class="v">${u.mana || 0} / ${d.manaMax}</td></tr>` : ''}
+      ${sigText        ? `<tr><td class="k">Special</td><td class="v">${sigText}</td></tr>` : ''}
       ${abilityText    ? `<tr><td class="k">Ability</td><td class="v">${abilityText}</td></tr>` : ''}
     </table>
   `;
