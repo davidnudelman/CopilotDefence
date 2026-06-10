@@ -121,50 +121,50 @@ const FAMILIES = {
 
 const UNITS = {
   // ── Wealth family ─ gold generation
-  bandit_c: { id: 'bandit_c', family: 'wealth', name: 'Bandit Intern', rarity: 'Common',    glyph: '💰', dmg: 2,  range: 1.2, aps: 0.8, type: 'physical', loot: 1 },
-  bandit_r: { id: 'bandit_r', family: 'wealth', name: 'Bandit',        rarity: 'Rare',      glyph: '🪙', dmg: 5,  range: 1.3, aps: 0.9, type: 'physical', loot: 3 },
-  bandit_e: { id: 'bandit_e', family: 'wealth', name: 'Master Thief',  rarity: 'Epic',      glyph: '🧥', dmg: 12, range: 1.4, aps: 1.0, type: 'physical', loot: 8 },
-  bandit_l: { id: 'bandit_l', family: 'wealth', name: 'Tax Collector', rarity: 'Legendary', glyph: '💸', dmg: 30, range: 1.5, aps: 1.1, type: 'physical', loot: 25 },
-  bandit_m: { id: 'bandit_m', family: 'wealth', name: 'Monopoly Man',  rarity: 'Mythic',    glyph: '🎩', dmg: 80, range: 2.0, aps: 1.0, type: 'physical', loot: 100, manaMax: 8, ability: 'goldBurst' },
+  bandit_c: { id: 'bandit_c', family: 'wealth', name: 'Piggy Bank',    rarity: 'Common',    dmg: 2,  range: 1.2, aps: 0.8, type: 'physical', loot: 1 },
+  bandit_r: { id: 'bandit_r', family: 'wealth', name: 'Bandit',        rarity: 'Rare',      dmg: 5,  range: 1.3, aps: 0.9, type: 'physical', loot: 3 },
+  bandit_e: { id: 'bandit_e', family: 'wealth', name: 'Master Thief',  rarity: 'Epic',      dmg: 12, range: 1.4, aps: 1.0, type: 'physical', loot: 8 },
+  bandit_l: { id: 'bandit_l', family: 'wealth', name: 'Tax Collector', rarity: 'Legendary', dmg: 30, range: 1.5, aps: 1.1, type: 'physical', loot: 25 },
+  bandit_m: { id: 'bandit_m', family: 'wealth', name: 'Monopoly Man',  rarity: 'Mythic',    dmg: 80, range: 2.0, aps: 1.0, type: 'physical', loot: 100, manaMax: 8, ability: 'goldBurst' },
 
   // ── Frost family ─ slow + freeze
-  frost_c: { id: 'frost_c', family: 'frost', name: 'Frost Trainee', rarity: 'Common',    glyph: '🥶', dmg: 3,  range: 1.8, aps: 1.0, type: 'magic',    slow: { amount: 0.20, duration: 1.0 } },
-  frost_r: { id: 'frost_r', family: 'frost', name: 'Frost Engineer',rarity: 'Rare',      glyph: '❄️', dmg: 6,  range: 2.0, aps: 1.0, type: 'magic',    slow: { amount: 0.30, duration: 1.2 } },
-  frost_e: { id: 'frost_e', family: 'frost', name: 'Cryomancer',    rarity: 'Epic',      glyph: '🧊', dmg: 13, range: 2.4, aps: 0.9, type: 'magic',    slow: { amount: 0.40, duration: 1.5 }, aoe: 0.7 },
-  frost_l: { id: 'frost_l', family: 'frost', name: 'Glacier Sage',  rarity: 'Legendary', glyph: '🏔', dmg: 28, range: 2.6, aps: 0.8, type: 'magic',    slow: { amount: 0.50, duration: 2.0 }, aoe: 1.0, freezeChance: 0.18, freezeDuration: 0.8 },
-  frost_m: { id: 'frost_m', family: 'frost', name: 'Winter King',   rarity: 'Mythic',    glyph: '⛄', dmg: 60, range: 3.0, aps: 0.9, type: 'magic',    slow: { amount: 0.55, duration: 2.5 }, aoe: 1.2, manaMax: 6,  ability: 'frostBomb' },
+  frost_c: { id: 'frost_c', family: 'frost', name: 'Ice Tosser',    rarity: 'Common',    dmg: 3,  range: 1.8, aps: 1.0, type: 'magic',    slow: { amount: 0.20, duration: 1.0 } },
+  frost_r: { id: 'frost_r', family: 'frost', name: 'Frost Engineer',rarity: 'Rare',      dmg: 6,  range: 2.0, aps: 1.0, type: 'magic',    slow: { amount: 0.30, duration: 1.2 } },
+  frost_e: { id: 'frost_e', family: 'frost', name: 'Cryomancer',    rarity: 'Epic',      dmg: 13, range: 2.4, aps: 0.9, type: 'magic',    slow: { amount: 0.40, duration: 1.5 }, aoe: 0.7 },
+  frost_l: { id: 'frost_l', family: 'frost', name: 'Glacier Sage',  rarity: 'Legendary', dmg: 28, range: 2.6, aps: 0.8, type: 'magic',    slow: { amount: 0.50, duration: 2.0 }, aoe: 1.0, freezeChance: 0.18, freezeDuration: 0.8 },
+  frost_m: { id: 'frost_m', family: 'frost', name: 'Blizzard King',  rarity: 'Mythic',    dmg: 60, range: 3.0, aps: 0.9, type: 'magic',    slow: { amount: 0.55, duration: 2.5 }, aoe: 1.2, manaMax: 6,  ability: 'frostBomb' },
 
   // ── Burn family ─ AoE damage-over-time
-  burn_c:  { id: 'burn_c',  family: 'burn',  name: 'Pyro Intern',   rarity: 'Common',    glyph: '🔥', dmg: 3,  range: 1.6, aps: 1.1, type: 'magic',    burn: { dps: 1.5, duration: 1.5 } },
-  burn_r:  { id: 'burn_r',  family: 'burn',  name: 'Hot-fixer',     rarity: 'Rare',      glyph: '🌶', dmg: 5,  range: 1.8, aps: 1.1, type: 'magic',    burn: { dps: 3,   duration: 2.0 } },
-  burn_e:  { id: 'burn_e',  family: 'burn',  name: 'Firefighter',   rarity: 'Epic',      glyph: '🚒', dmg: 10, range: 2.2, aps: 1.0, type: 'magic',    aoe: 0.8, burn: { dps: 6,  duration: 2.5 } },
-  burn_l:  { id: 'burn_l',  family: 'burn',  name: 'Wildfire',      rarity: 'Legendary', glyph: '🌋', dmg: 22, range: 2.4, aps: 1.0, type: 'magic',    aoe: 1.0, burn: { dps: 13, duration: 3.0 } },
-  burn_m:  { id: 'burn_m',  family: 'burn',  name: 'Inferno Lord',  rarity: 'Mythic',    glyph: '☄️', dmg: 48, range: 2.8, aps: 0.9, type: 'magic',    aoe: 1.2, burn: { dps: 26, duration: 3.5 }, manaMax: 10, ability: 'infernoBlast' },
+  burn_c:  { id: 'burn_c',  family: 'burn',  name: 'Torch Bearer',  rarity: 'Common',    dmg: 3,  range: 1.6, aps: 1.1, type: 'magic',    burn: { dps: 1.5, duration: 1.5 } },
+  burn_r:  { id: 'burn_r',  family: 'burn',  name: 'Hot-fixer',     rarity: 'Rare',      dmg: 5,  range: 1.8, aps: 1.1, type: 'magic',    burn: { dps: 3,   duration: 2.0 } },
+  burn_e:  { id: 'burn_e',  family: 'burn',  name: 'Firefighter',   rarity: 'Epic',      dmg: 10, range: 2.2, aps: 1.0, type: 'magic',    aoe: 0.8, burn: { dps: 6,  duration: 2.5 } },
+  burn_l:  { id: 'burn_l',  family: 'burn',  name: 'Wildfire',      rarity: 'Legendary', dmg: 22, range: 2.4, aps: 1.0, type: 'magic',    aoe: 1.0, burn: { dps: 13, duration: 3.0 } },
+  burn_m:  { id: 'burn_m',  family: 'burn',  name: 'Inferno Lord',  rarity: 'Mythic',    dmg: 48, range: 2.8, aps: 0.9, type: 'magic',    aoe: 1.2, burn: { dps: 26, duration: 3.5 }, manaMax: 10, ability: 'infernoBlast' },
 
   // ── Sniper family ─ high range + attack speed
-  sniper_c:{ id: 'sniper_c',family: 'sniper',name: 'Scout',         rarity: 'Common',    glyph: '👀', dmg: 4,  range: 2.6, aps: 1.4, type: 'physical' },
-  sniper_r:{ id: 'sniper_r',family: 'sniper',name: 'Marksman',      rarity: 'Rare',      glyph: '🏹', dmg: 7,  range: 3.0, aps: 1.5, type: 'physical' },
-  sniper_e:{ id: 'sniper_e',family: 'sniper',name: 'Sharpshooter',  rarity: 'Epic',      glyph: '🎯', dmg: 15, range: 3.4, aps: 1.6, type: 'physical' },
-  sniper_l:{ id: 'sniper_l',family: 'sniper',name: 'Eagle Eye',     rarity: 'Legendary', glyph: '🦅', dmg: 32, range: 3.6, aps: 1.7, type: 'physical' },
-  sniper_m:{ id: 'sniper_m',family: 'sniper',name: 'Skywatch',      rarity: 'Mythic',    glyph: '🛰', dmg: 58, range: 4.0, aps: 2.0, type: 'physical', manaMax: 5, ability: 'multiShot' },
+  sniper_c:{ id: 'sniper_c',family: 'sniper',name: 'Bowman',        rarity: 'Common',    dmg: 4,  range: 2.6, aps: 1.4, type: 'physical' },
+  sniper_r:{ id: 'sniper_r',family: 'sniper',name: 'Marksman',      rarity: 'Rare',      dmg: 7,  range: 3.0, aps: 1.5, type: 'physical' },
+  sniper_e:{ id: 'sniper_e',family: 'sniper',name: 'Sharpshooter',  rarity: 'Epic',      dmg: 15, range: 3.4, aps: 1.6, type: 'physical' },
+  sniper_l:{ id: 'sniper_l',family: 'sniper',name: 'Eagle Eye',     rarity: 'Legendary', dmg: 32, range: 3.6, aps: 1.7, type: 'physical' },
+  sniper_m:{ id: 'sniper_m',family: 'sniper',name: 'Elite Sniper',  rarity: 'Mythic',    dmg: 58, range: 4.0, aps: 2.0, type: 'physical', manaMax: 5, ability: 'multiShot' },
 
   // ── Bruiser family ─ short range, heavy single-target
-  bruis_c: { id: 'bruis_c', family: 'bruiser',name: 'Brawler',      rarity: 'Common',    glyph: '👊', dmg: 9,   range: 1.0, aps: 0.7, type: 'physical' },
-  bruis_r: { id: 'bruis_r', family: 'bruiser',name: 'Warrior',      rarity: 'Rare',      glyph: '⚔️', dmg: 16,  range: 1.1, aps: 0.7, type: 'physical' },
-  bruis_e: { id: 'bruis_e', family: 'bruiser',name: 'Gladiator',    rarity: 'Epic',      glyph: '🛡', dmg: 32,  range: 1.2, aps: 0.7, type: 'physical' },
-  bruis_l: { id: 'bruis_l', family: 'bruiser',name: 'Champion',     rarity: 'Legendary', glyph: '💪', dmg: 70,  range: 1.3, aps: 0.7, type: 'physical' },
-  bruis_m: { id: 'bruis_m', family: 'bruiser',name: 'Berserker',    rarity: 'Mythic',    glyph: '🪓', dmg: 140, range: 1.4, aps: 0.7, type: 'physical', manaMax: 8,  ability: 'critStrike' },
+  bruis_c: { id: 'bruis_c', family: 'bruiser',name: 'Squire',        rarity: 'Common',    dmg: 9,   range: 1.0, aps: 0.7, type: 'physical' },
+  bruis_r: { id: 'bruis_r', family: 'bruiser',name: 'Warrior',      rarity: 'Rare',      dmg: 16,  range: 1.1, aps: 0.7, type: 'physical' },
+  bruis_e: { id: 'bruis_e', family: 'bruiser',name: 'Gladiator',    rarity: 'Epic',      dmg: 32,  range: 1.2, aps: 0.7, type: 'physical' },
+  bruis_l: { id: 'bruis_l', family: 'bruiser',name: 'Champion',     rarity: 'Legendary', dmg: 70,  range: 1.3, aps: 0.7, type: 'physical' },
+  bruis_m: { id: 'bruis_m', family: 'bruiser',name: 'Berserker',    rarity: 'Mythic',    dmg: 140, range: 1.4, aps: 0.7, type: 'physical', manaMax: 8,  ability: 'critStrike' },
 
   // ── Arcane family ─ mana support + late-game spike
-  arc_c:   { id: 'arc_c',   family: 'arcane', name: 'Apprentice',   rarity: 'Common',    glyph: '📖', dmg: 3,   range: 2.0, aps: 1.0, type: 'magic' },
-  arc_r:   { id: 'arc_r',   family: 'arcane', name: 'Wizard',       rarity: 'Rare',      glyph: '🧙', dmg: 5,   range: 2.2, aps: 1.0, type: 'magic' },
-  arc_e:   { id: 'arc_e',   family: 'arcane', name: 'Mana Catalyst',rarity: 'Epic',      glyph: '✨', dmg: 9,   range: 2.4, aps: 1.0, type: 'magic',    manaAura: 2.2 },
-  arc_l:   { id: 'arc_l',   family: 'arcane', name: 'Archmage',     rarity: 'Legendary', glyph: '🪄', dmg: 26,  range: 2.6, aps: 1.0, type: 'magic' },
-  arc_m:   { id: 'arc_m',   family: 'arcane', name: 'Storm Archon', rarity: 'Mythic',    glyph: '⚡', dmg: 45,  range: 2.8, aps: 1.0, type: 'magic',    manaMax: 12, ability: 'chainLightning' },
+  arc_c:   { id: 'arc_c',   family: 'arcane', name: 'Apprentice',   rarity: 'Common',    dmg: 3,   range: 2.0, aps: 1.0, type: 'magic' },
+  arc_r:   { id: 'arc_r',   family: 'arcane', name: 'Wizard',       rarity: 'Rare',      dmg: 5,   range: 2.2, aps: 1.0, type: 'magic' },
+  arc_e:   { id: 'arc_e',   family: 'arcane', name: 'Mana Catalyst',rarity: 'Epic',      dmg: 9,   range: 2.4, aps: 1.0, type: 'magic',    manaAura: 2.2 },
+  arc_l:   { id: 'arc_l',   family: 'arcane', name: 'Archmage',     rarity: 'Legendary', dmg: 26,  range: 2.6, aps: 1.0, type: 'magic' },
+  arc_m:   { id: 'arc_m',   family: 'arcane', name: 'Storm Archon', rarity: 'Mythic',    dmg: 45,  range: 2.8, aps: 1.0, type: 'magic',    manaMax: 12, ability: 'chainLightning' },
 
-  // ── Immortals (merge-only: 3× bruiser/arcane Mythic)
-  haley:   { id: 'haley',   family: 'bruiser',name: 'Haley',        rarity: 'Immortal',  glyph: '🦸', dmg: 220, range: 1.6, aps: 0.8, type: 'physical', variable: true, manaMax: 5, ability: 'crushingBlow' },
-  ato:     { id: 'ato',     family: 'arcane', name: 'Immortal Ato', rarity: 'Immortal',  glyph: '🦋', dmg: 140, range: 3.0, aps: 1.0, type: 'magic',    variable: true, aoe: 1.2, manaMax: 10, ability: 'starfall' },
+  // ── Immortals (merge-only)
+  haley:   { id: 'haley',   family: 'bruiser',name: 'Immortal Haley',rarity: 'Immortal',  dmg: 220, range: 1.6, aps: 0.8, type: 'physical', variable: true, manaMax: 5, ability: 'crushingBlow' },
+  ato:     { id: 'ato',     family: 'arcane', name: 'Immortal Ato', rarity: 'Immortal',  dmg: 140, range: 3.0, aps: 1.0, type: 'magic',    variable: true, aoe: 1.2, manaMax: 10, ability: 'starfall' },
 };
 
 const POOLS = {
@@ -751,7 +751,8 @@ function updateUnits(dt) {
     if (!target) continue;
 
     let dmg = unitDamage(u);
-    if (d.percentHP) dmg += target.maxHp * d.percentHP;
+    if (u.stackCount > 1) dmg *= u.stackCount;
+    if (d.percentHP) dmg += target.maxHp * d.percentHP * (u.stackCount || 1);
     damageEnemy(target, dmg, d.type, u);
 
     if (d.aoe) {
@@ -1097,13 +1098,21 @@ function triggerSignature(u, target, c) {
   unlock('ability');
 }
 
-function findEmptyCell() {
+function findEmptyCell(id) {
   const choices = [];
+  const d = id ? UNITS[id] : null;
+
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       if (PATH_CELLS.has(`${c},${r}`)) continue;
-      if (game.units.some(u => u.col === c && u.row === r)) continue;
-      choices.push([c, r]);
+
+      const occupant = game.units.find(u => u.col === c && u.row === r);
+      if (!occupant) {
+        choices.push([c, r]);
+      } else if (d && d.rarity === 'Common' && occupant.id === id && (occupant.stackCount || 1) < 3) {
+        // Can stack on this cell
+        choices.push([c, r]);
+      }
     }
   }
   if (!choices.length) return null;
@@ -1111,9 +1120,18 @@ function findEmptyCell() {
 }
 
 function spawnUnit(id, col, row) {
-  const u = { id, col, row, cooldown: 0, flash: 0, mana: 0, atkCount: 0 };
-  game.units.push(u);
   const d = UNITS[id];
+  if (d.rarity === 'Common') {
+    const existing = game.units.find(x => x.col === col && x.row === row && x.id === id);
+    if (existing && (existing.stackCount || 1) < 3) {
+      existing.stackCount = (existing.stackCount || 1) + 1;
+      log(`Stacked ${d.name} (x${existing.stackCount})`, 'common');
+      return existing;
+    }
+  }
+
+  const u = { id, col, row, cooldown: 0, flash: 0, mana: 0, atkCount: 0, stackCount: 1 };
+  game.units.push(u);
   log(`Summoned ${d.name}`, d.rarity.toLowerCase());
   if (d.rarity === 'Epic')      completeMission('firstEpic');
   if (d.rarity === 'Legendary') completeMission('firstLegendary');
@@ -1129,12 +1147,15 @@ function spawnUnit(id, col, row) {
 
 function summon() {
   if (game.gold < game.summonCost) return;
-  const cell = findEmptyCell();
-  if (!cell) { log('Board is full', 'danger'); return; }
-  game.gold -= game.summonCost;
-  game.summonCost = Math.min(SUMMON_COST_CAP, game.summonCost + SUMMON_COST_STEP);
+
   const rarity = Math.random() < 0.78 ? 'Common' : 'Rare';
   const id = POOLS[rarity][Math.floor(Math.random() * POOLS[rarity].length)];
+
+  const cell = findEmptyCell(id);
+  if (!cell) { log('Board is full', 'danger'); return; }
+
+  game.gold -= game.summonCost;
+  game.summonCost = Math.min(SUMMON_COST_CAP, game.summonCost + SUMMON_COST_STEP);
   spawnUnit(id, cell[0], cell[1]);
   completeMission('firstSummon');
   updateUI();
@@ -1183,14 +1204,34 @@ function mergeSelected() {
 
   if (recipeId) {
     // Standard 3-of-a-kind merge
-    const same = game.units.filter(x => x.id === u.id);
-    if (same.length < 3) return;
-    const toRemove = same.slice(0, 3);
-    const keepCell = { col: toRemove[0].col, row: toRemove[0].row };
-    for (const x of toRemove) {
-      const idx = game.units.indexOf(x);
+    const allOfSameType = game.units.filter(x => x.id === u.id);
+    const totalCount = allOfSameType.reduce((s, x) => s + (x.stackCount || 1), 0);
+    if (totalCount < 3) return;
+
+    // Collect exactly 3 to remove
+    let countToRemove = 3;
+    const toRemove = [];
+    const keepCell = { col: u.col, row: u.row };
+
+    // Sort to prioritize removing the selected unit or smaller stacks?
+    // Let's just iterate and take what we need.
+    for (const x of allOfSameType) {
+      if (countToRemove <= 0) break;
+      if (x.stackCount <= countToRemove) {
+        countToRemove -= x.stackCount;
+        toRemove.push({ unit: x, amount: x.stackCount });
+      } else {
+        x.stackCount -= countToRemove;
+        countToRemove = 0;
+        // Not adding to toRemove because it's not fully removed
+      }
+    }
+
+    for (const item of toRemove) {
+      const idx = game.units.indexOf(item.unit);
       if (idx >= 0) game.units.splice(idx, 1);
     }
+
     const newUnit = spawnUnit(recipeId, keepCell.col, keepCell.row);
     game.selectedUnit = newUnit;
     completeMission('firstMerge');
@@ -1262,7 +1303,8 @@ function sellSelected() {
   const u = game.selectedUnit;
   if (!u) return;
   const d = UNITS[u.id];
-  const refund = { Common: 4, Rare: 9, Epic: 35, Legendary: 100, Mythic: 250, Immortal: 600 }[d.rarity];
+  let refund = { Common: 4, Rare: 9, Epic: 35, Legendary: 100, Mythic: 250, Immortal: 600 }[d.rarity];
+  if (u.stackCount > 1) refund *= u.stackCount;
   game.gold += refund;
   const onBoard = game.units.indexOf(u);
   if (onBoard >= 0) game.units.splice(onBoard, 1);
@@ -1613,50 +1655,135 @@ function drawRangeIndicator(ctx, u) {
 
 const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
 
-function drawChibi(ctx, x, y, size, familyColor, rarityColor, glyph, t, flash) {
+function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
+  const d = UNITS[unitId];
+  const fam = FAMILIES[d.family];
+  const rarity = d.rarity;
+
   ctx.save();
   ctx.translate(x, y);
 
-  // Squash/stretch based on time
   const scaleY = 1 + Math.sin(t * 8) * 0.05;
   const scaleX = 1 - Math.sin(t * 8) * 0.05;
   ctx.scale(scaleX, scaleY);
 
-  // Body
-  ctx.fillStyle = familyColor;
-  ctx.beginPath();
-  ctx.roundRect(-size/2, -size/1.5, size, size, size/4);
-  ctx.fill();
+  // Draw shape based on family
+  ctx.fillStyle = fam.color;
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
 
-  // Head/Face area
-  ctx.fillStyle = '#fff';
-  ctx.globalAlpha = 0.2;
   ctx.beginPath();
-  ctx.roundRect(-size/2.5, -size/1.8, size/1.25, size/2, size/8);
+  switch (d.family) {
+    case 'frost': // Diamond
+      ctx.moveTo(0, -size * 0.7);
+      ctx.lineTo(size * 0.5, 0);
+      ctx.lineTo(0, size * 0.7);
+      ctx.lineTo(-size * 0.5, 0);
+      break;
+    case 'burn': // Star/Flame
+      for (let i = 0; i < 8; i++) {
+        const r = i % 2 === 0 ? size * 0.7 : size * 0.3;
+        const angle = (i / 8) * Math.PI * 2;
+        ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+      }
+      break;
+    case 'sniper': // Triangle
+      ctx.moveTo(0, -size * 0.7);
+      ctx.lineTo(size * 0.6, size * 0.5);
+      ctx.lineTo(-size * 0.6, size * 0.5);
+      break;
+    case 'bruiser': // Square
+      ctx.rect(-size * 0.5, -size * 0.5, size, size);
+      break;
+    case 'arcane': // Circle
+      ctx.arc(0, 0, size * 0.6, 0, Math.PI * 2);
+      break;
+    case 'wealth': // Hexagon
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        ctx.lineTo(Math.cos(angle) * size * 0.6, Math.sin(angle) * size * 0.6);
+      }
+      break;
+  }
+  ctx.closePath();
   ctx.fill();
-  ctx.globalAlpha = 1.0;
+  ctx.stroke();
 
-  // Eyes
+  // Character specific features
   ctx.fillStyle = '#1c2436';
   const eyeSize = size / 10;
-  ctx.beginPath();
-  ctx.arc(-size/5, -size/2.5, eyeSize, 0, Math.PI * 2);
-  ctx.arc(size/5, -size/2.5, eyeSize, 0, Math.PI * 2);
-  ctx.fill();
 
-  // Glyph/Icon on the body
-  ctx.font = `${size/2}px ${EMOJI_FONT}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(glyph, 0, 0);
+  // Wealth character progression
+  if (d.family === 'wealth') {
+    if (rarity === 'Common') { // Piggy bank
+      ctx.fillStyle = '#ffb6c1'; ctx.fill();
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-size*0.2, -size*0.1, eyeSize, 0, Math.PI*2); ctx.arc(size*0.2, -size*0.1, eyeSize, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.arc(0, size*0.1, size*0.1, 0, Math.PI); ctx.stroke();
+    } else if (rarity === 'Mythic') { // Monopoly Man
+      ctx.fillStyle = '#000'; ctx.fillRect(-size*0.4, -size*0.8, size*0.8, size*0.3); // Top hat
+      ctx.fillRect(-size*0.6, -size*0.5, size*1.2, size*0.1);
+      ctx.beginPath(); ctx.arc(-size*0.2, -size*0.1, eyeSize, 0, Math.PI*2); ctx.arc(size*0.2, -size*0.1, eyeSize, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-size*0.3, size*0.2); ctx.lineTo(size*0.3, size*0.2); ctx.stroke(); // Moustache
+    }
+  } else if (d.family === 'arcane') {
+    if (rarity === 'Common') { // Sticky man with wand
+       ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.moveTo(0, -size*0.3); ctx.lineTo(0, size*0.3); ctx.stroke();
+       ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(size*0.4, -size*0.2); ctx.stroke(); // Wand arm
+    } else if (rarity === 'Legendary' || rarity === 'Mythic') { // Wizard
+       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-size*0.4, size*0.2); ctx.lineTo(0, -size*0.8); ctx.lineTo(size*0.4, size*0.2); ctx.fill(); // Wizard hat
+    }
+  } else if (d.family === 'bruiser') {
+    if (rarity === 'Common') { // Squire with shield
+      ctx.fillStyle = '#ccc'; ctx.beginPath(); ctx.rect(size*0.1, -size*0.2, size*0.4, size*0.5); ctx.fill(); // Shield
+    } else if (rarity === 'Mythic') { // Strong man
+      ctx.fillStyle = fam.color; ctx.beginPath(); ctx.arc(-size*0.5, 0, size*0.3, 0, Math.PI*2); ctx.arc(size*0.5, 0, size*0.3, 0, Math.PI*2); ctx.fill(); // Muscles
+    }
+  } else if (d.family === 'sniper') {
+    if (rarity === 'Common') { // Bowman
+       ctx.strokeStyle = '#8b4513'; ctx.beginPath(); ctx.arc(size*0.3, 0, size*0.4, -Math.PI/2, Math.PI/2); ctx.stroke(); // Bow
+    } else if (rarity === 'Mythic') { // Sniper with gun
+       ctx.fillStyle = '#333'; ctx.fillRect(0, -size*0.1, size*0.8, size*0.2); // Gun barrel
+       ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-size*0.2, -size*0.2, size*0.2, 0, Math.PI*2); ctx.fill(); // Helmet
+    }
+  } else if (d.family === 'burn') {
+    if (rarity === 'Common') { // Torch
+       ctx.strokeStyle = '#8b4513'; ctx.beginPath(); ctx.moveTo(size*0.3, size*0.4); ctx.lineTo(size*0.3, -size*0.1); ctx.stroke();
+       ctx.fillStyle = '#f00'; ctx.beginPath(); ctx.arc(size*0.3, -size*0.2, size*0.15, 0, Math.PI*2); ctx.fill();
+    } else if (rarity === 'Mythic') { // Flamethrower
+       ctx.fillStyle = '#555'; ctx.fillRect(size*0.2, -size*0.1, size*0.6, size*0.2); // Nozzle
+    }
+  } else if (d.family === 'frost') {
+    if (rarity === 'Common') { // Ice tosser
+       ctx.fillStyle = '#add8e6'; ctx.beginPath(); ctx.rect(size*0.2, -size*0.4, size*0.2, size*0.2); ctx.fill(); // Ice cube
+    } else if (rarity === 'Mythic') { // Blizzard/Tornado
+       for(let i=0; i<3; i++) {
+         ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.ellipse(0, -size*0.2 + i*size*0.2, size*0.5 - i*size*0.1, size*0.1, 0, 0, Math.PI*2); ctx.stroke();
+       }
+    }
+  }
 
-  // Flash effect
+  // Default eyes if not overridden
+  if (d.family !== 'wealth') {
+    ctx.fillStyle = '#1c2436';
+    ctx.beginPath();
+    ctx.arc(-size/4, -size/6, eyeSize, 0, Math.PI * 2);
+    ctx.arc(size/4, -size/6, eyeSize, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   if (flash > 0) {
     ctx.fillStyle = '#fff';
     ctx.globalAlpha = (flash / 0.1) * 0.4;
-    ctx.beginPath();
-    ctx.roundRect(-size/2, -size/1.5, size, size, size/4);
     ctx.fill();
+  }
+
+  // Draw stack count for Level 1 units
+  if (d.rarity === 'Common' && (stackCount || 1) > 1) {
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${size/3}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('x' + stackCount, size/3, size/3);
   }
 
   ctx.restore();
@@ -1690,7 +1817,18 @@ function drawUnitAt(ctx, u, x, y, ghost = false) {
   ctx.arc(x, y, 26, 0, Math.PI * 2);
   ctx.stroke();
 
-  if (d.rarity === 'Mythic') {
+  if (d.rarity === 'Legendary') {
+    // Pulsing glow
+    const pulse = 0.5 + 0.5 * Math.sin(t * 4);
+    ctx.shadowBlur = 10 + pulse * 10;
+    ctx.shadowColor = color;
+    ctx.strokeStyle = `rgba(176, 107, 240, ${0.4 + pulse * 0.4})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, 30, t, t + Math.PI * 2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  } else if (d.rarity === 'Mythic') {
     ctx.strokeStyle = 'rgba(244, 155, 58, 0.4)';
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
@@ -1698,7 +1836,27 @@ function drawUnitAt(ctx, u, x, y, ghost = false) {
     ctx.arc(x, y, 30, t, t + Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
+
+    // Rotating orbs
+    for (let i = 0; i < 3; i++) {
+      const angle = t * 3 + (i / 3) * Math.PI * 2;
+      const ox = x + Math.cos(angle) * 32;
+      const oy = y + Math.sin(angle) * 32;
+      ctx.fillStyle = '#f49b3a';
+      ctx.beginPath();
+      ctx.arc(ox, oy, 4, 0, Math.PI * 2);
+      ctx.fill();
+      // small glow for orbs
+      ctx.shadowBlur = 5;
+      ctx.shadowColor = '#f49b3a';
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
   } else if (d.rarity === 'Immortal') {
+    // Rainbow glow
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = `hsl(${(t * 100) % 360} 100% 50%)`;
+
     for (let i = 0; i < 6; i++) {
       const a0 = t * 2 + i * Math.PI / 3;
       const a1 = a0 + Math.PI / 5;
@@ -1708,10 +1866,70 @@ function drawUnitAt(ctx, u, x, y, ghost = false) {
       ctx.arc(x, y, 32, a0, a1);
       ctx.stroke();
     }
+    ctx.shadowBlur = 0;
   }
 
   // Draw the actual Chibi character
-  drawChibi(ctx, x, y, 40, fam.color, color, d.glyph, t + (u.col * 0.1 + u.row * 0.1), u.flash);
+  const allOfSameType = game.units.filter(x => x.id === u.id);
+  const totalCount = allOfSameType.reduce((s, x) => s + (x.stackCount || 1), 0);
+  let readyToLevel = totalCount >= 3 && MERGE_RECIPES[u.id];
+
+  // Check for recipes
+  if (!readyToLevel) {
+    const combinedRecipes = { ...MYTHIC_RECIPES, ...IMMORTAL_RECIPES };
+    for (const rid in combinedRecipes) {
+      const r = combinedRecipes[rid];
+      if (r.ingredients.includes(u.id)) {
+        const currentUnits = [...game.units];
+        let possible = true;
+        for (const ingId of r.ingredients) {
+          const idx = currentUnits.findIndex(x => x.id === ingId);
+          if (idx >= 0) {
+            currentUnits.splice(idx, 1);
+          } else {
+            possible = false;
+            break;
+          }
+        }
+        if (possible && game.stones >= r.stones) {
+          readyToLevel = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if (readyToLevel) {
+    ctx.save();
+    ctx.translate(x, y - 30);
+    const starT = t * 5;
+    ctx.scale(1 + Math.sin(starT) * 0.1, 1 + Math.sin(starT) * 0.1);
+    ctx.fillStyle = '#ff0';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      ctx.lineTo(Math.cos(angle) * 8, Math.sin(angle) * 8);
+      const angle2 = ((i + 0.5) / 5) * Math.PI * 2 - Math.PI / 2;
+      ctx.lineTo(Math.cos(angle2) * 4, Math.sin(angle2) * 4);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const rarityScale = {
+    Common: 0.7,
+    Rare: 0.8,
+    Epic: 0.9,
+    Legendary: 1.0,
+    Mythic: 1.15,
+    Immortal: 1.3
+  }[d.rarity] || 1.0;
+
+  drawCharacter(ctx, u.id, x, y, 40 * rarityScale, t + (u.col * 0.1 + u.row * 0.1), u.flash, u.stackCount);
   // mana ring (arc) for units with an ability — full circle = ready.
   if (d.manaMax) {
     const frac = Math.min(1, (u.mana || 0) / d.manaMax);
@@ -2029,10 +2247,27 @@ function onMouseUp(ev) {
   if (inside && !onPath) {
     const other = game.units.find(x => x !== u && x.col === col && x.row === row);
     if (other) {
-      // Swap positions with the occupant.
-      const oldCol = u.col, oldRow = u.row;
-      u.col = col;       u.row = row;
-      other.col = oldCol; other.row = oldRow;
+      const d = UNITS[u.id];
+      if (d.rarity === 'Common' && other.id === u.id && (other.stackCount || 1) < 3) {
+        // Merge stack
+        const total = (u.stackCount || 1) + (other.stackCount || 1);
+        if (total <= 3) {
+          other.stackCount = total;
+          game.units.splice(game.units.indexOf(u), 1);
+          log(`Merged stack ${d.name} (x${other.stackCount})`, 'common');
+        } else {
+          // Keep what fits in other, remainder in u?
+          // For simplicity, just swap if it doesn't fit perfectly or would exceed 3.
+          const oldCol = u.col, oldRow = u.row;
+          u.col = col;       u.row = row;
+          other.col = oldCol; other.row = oldRow;
+        }
+      } else {
+        // Swap positions with the occupant.
+        const oldCol = u.col, oldRow = u.row;
+        u.col = col;       u.row = row;
+        other.col = oldCol; other.row = oldRow;
+      }
     } else {
       u.col = col;
       u.row = row;
