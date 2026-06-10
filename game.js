@@ -1825,7 +1825,7 @@ function drawUnitAt(ctx, u, x, y, ghost = false) {
     ctx.strokeStyle = `rgba(176, 107, 240, ${0.4 + pulse * 0.4})`;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(x, y, 28, 0, Math.PI * 2);
+    ctx.arc(x, y, 30, t, t + Math.PI * 2);
     ctx.stroke();
     ctx.shadowBlur = 0;
   } else if (d.rarity === 'Mythic') {
