@@ -116,17 +116,9 @@ const FAMILIES = {
   sniper:  { id: 'sniper',  name: 'Sniper',  color: '#a8e055', desc: 'Long range and a rapid trigger finger.' },
   bruiser: { id: 'bruiser', name: 'Bruiser', color: '#ff7e7e', desc: 'Short range, devastating single-target.' },
   arcane:  { id: 'arcane',  name: 'Arcane',  color: '#b06bf0', desc: 'Charges mana and accelerates the board.' },
-  wealth:  { id: 'wealth',  name: 'Wealth',  color: '#ffd166', desc: 'Specializes in gold generation.' },
 };
 
 const UNITS = {
-  // ── Wealth family ─ gold generation
-  bandit_c: { id: 'bandit_c', family: 'wealth', name: 'Piggy Bank',    rarity: 'Common',    dmg: 2,  range: 1.2, aps: 0.8, type: 'physical', loot: 1, glyph: '🐷' },
-  bandit_r: { id: 'bandit_r', family: 'wealth', name: 'Bandit',        rarity: 'Rare',      dmg: 5,  range: 1.3, aps: 0.9, type: 'physical', loot: 3, glyph: '💰' },
-  bandit_e: { id: 'bandit_e', family: 'wealth', name: 'Master Thief',  rarity: 'Epic',      dmg: 12, range: 1.4, aps: 1.0, type: 'physical', loot: 8, glyph: '🕵️' },
-  bandit_l: { id: 'bandit_l', family: 'wealth', name: 'Tax Collector', rarity: 'Legendary', dmg: 30, range: 1.5, aps: 1.1, type: 'physical', loot: 25, glyph: '🏛️' },
-  bandit_m: { id: 'bandit_m', family: 'wealth', name: 'Monopoly Man',  rarity: 'Mythic',    dmg: 80, range: 2.0, aps: 1.0, type: 'physical', loot: 100, manaMax: 8, ability: 'goldBurst', glyph: '🎩' },
-
   // ── Frost family ─ slow + freeze
   frost_c: { id: 'frost_c', family: 'frost', name: 'Ice Tosser',    rarity: 'Common',    dmg: 3,  range: 1.8, aps: 1.0, type: 'magic',    slow: { amount: 0.20, duration: 1.0 }, glyph: '❄️' },
   frost_r: { id: 'frost_r', family: 'frost', name: 'Frost Engineer',rarity: 'Rare',      dmg: 6,  range: 2.0, aps: 1.0, type: 'magic',    slow: { amount: 0.30, duration: 1.2 }, glyph: '🛠️' },
@@ -149,7 +141,7 @@ const UNITS = {
   sniper_m:{ id: 'sniper_m',family: 'sniper',name: 'Elite Sniper',  rarity: 'Mythic',    dmg: 58, range: 4.0, aps: 2.0, type: 'physical', manaMax: 5, ability: 'multiShot', glyph: '💂' },
 
   // ── Bruiser family ─ short range, heavy single-target
-  bruis_c: { id: 'bruis_c', family: 'bruiser',name: 'Squire',        rarity: 'Common',    dmg: 9,   range: 1.0, aps: 0.7, type: 'physical', glyph: '🛡️' },
+  bruis_c: { id: 'bruis_c', family: 'bruiser',name: 'Squire',        rarity: 'Common',    dmg: 9,   range: 1.0, aps: 0.7, type: 'physical', loot: 1, glyph: '🛡️' },
   bruis_r: { id: 'bruis_r', family: 'bruiser',name: 'Warrior',      rarity: 'Rare',      dmg: 16,  range: 1.1, aps: 0.7, type: 'physical', glyph: '⚔️' },
   bruis_e: { id: 'bruis_e', family: 'bruiser',name: 'Gladiator',    rarity: 'Epic',      dmg: 32,  range: 1.2, aps: 0.7, type: 'physical', glyph: '🤺' },
   bruis_l: { id: 'bruis_l', family: 'bruiser',name: 'Champion',     rarity: 'Legendary', dmg: 70,  range: 1.3, aps: 0.7, type: 'physical', glyph: '🏆' },
@@ -168,11 +160,11 @@ const UNITS = {
 };
 
 const POOLS = {
-  Common:    ['frost_c', 'burn_c', 'sniper_c', 'bruis_c', 'arc_c', 'bandit_c'],
-  Rare:      ['frost_r', 'burn_r', 'sniper_r', 'bruis_r', 'arc_r', 'bandit_r'],
-  Epic:      ['frost_e', 'burn_e', 'sniper_e', 'bruis_e', 'arc_e', 'bandit_e'],
-  Legendary: ['frost_l', 'burn_l', 'sniper_l', 'bruis_l', 'arc_l', 'bandit_l'],
-  Mythic:    ['frost_m', 'burn_m', 'sniper_m', 'bruis_m', 'arc_m', 'bandit_m'],
+  Common:    ['frost_c', 'burn_c', 'sniper_c', 'bruis_c', 'arc_c'],
+  Rare:      ['frost_r', 'burn_r', 'sniper_r', 'bruis_r', 'arc_r'],
+  Epic:      ['frost_e', 'burn_e', 'sniper_e', 'bruis_e', 'arc_e'],
+  Legendary: ['frost_l', 'burn_l', 'sniper_l', 'bruis_l', 'arc_l'],
+  Mythic:    ['frost_m', 'burn_m', 'sniper_m', 'bruis_m', 'arc_m'],
   Immortal:  ['haley', 'ato'],
 };
 
@@ -184,7 +176,6 @@ const ABILITY_DESCRIPTIONS = {
   chainLightning: 'Every full mana: chain lightning hits up to 6 enemies.',
   crushingBlow:   'Every full mana: huge hit + 6% of target max HP.',
   starfall:       'Every full mana: starfall over all enemies in range.',
-  goldBurst:      'Every full mana: grants massive gold based on current wave.',
 };
 
 /* === Family signature specials ===
@@ -205,8 +196,6 @@ const SIGNATURE = {
              desc: () => 'Devastating single hit + bonus % max HP and a brief stun.' },
   arcane:  { name: 'Mana Surge',      glyph: '✨', color: '#b06bf0',
              desc: () => 'Pours mana into nearby charging allies and zaps the target.' },
-  wealth:  { name: 'Looting',         glyph: '💰', color: '#ffd166',
-             desc: () => 'Attack has a chance to generate extra gold.' },
 };
 
 /* Roulette costs/odds — premium tiers above Legendary require merges. */
@@ -224,7 +213,6 @@ const MERGE_RECIPES = {
   sniper_c: 'sniper_r', sniper_r: 'sniper_e', sniper_e: 'sniper_l',
   bruis_c:  'bruis_r',  bruis_r:  'bruis_e',  bruis_e:  'bruis_l',
   arc_c:    'arc_r',    arc_r:    'arc_e',    arc_e:    'arc_l',
-  bandit_c: 'bandit_r', bandit_r: 'bandit_e', bandit_e: 'bandit_l',
 };
 
 /* Mythic Recipes — specific combinations of Legendaries needed to summon a Mythic.
@@ -235,7 +223,6 @@ const MYTHIC_RECIPES = {
   sniper_m: { ingredients: ['sniper_l', 'frost_l'], stones: 6, result: 'sniper_m' },
   bruis_m:  { ingredients: ['bruis_l', 'burn_l'],  stones: 6, result: 'bruis_m' },
   arc_m:    { ingredients: ['arc_l', 'bruis_l'],   stones: 6, result: 'arc_m' },
-  bandit_m: { ingredients: ['bandit_l', 'arc_l'],  stones: 6, result: 'bandit_m' },
 };
 
 /* Immortal Recipes */
@@ -471,7 +458,7 @@ const ui = {};
 function makeMissions() {
   return [
     { id: 'firstSummon',    text: 'Summon your first guardian', reward: { stones: 1 } },
-    { id: 'banditGold',     text: 'Have a Bandit earn gold',    reward: { stones: 1 } },
+    { id: 'squireGold',     text: 'Have a Squire earn gold',    reward: { stones: 1 } },
     { id: 'fiveCommons',    text: 'Have 5 Commons on board',    reward: { stones: 1 } },
     { id: 'firstMerge',     text: 'Merge 3 units',              reward: { stones: 1 } },
     { id: 'firstEpic',      text: 'Obtain an Epic unit',        reward: { stones: 1 } },
@@ -844,7 +831,8 @@ function updateUnits(dt) {
       const amt = d.loot;
       game.gold += amt;
       spawnPopup(target.x, target.y - 10, `+${amt}g`, '#f5c542');
-      completeMission('banditGold');
+      spawnCoin(target.x, target.y);
+      completeMission('squireGold');
     }
 
     if (d.manaMax) {
@@ -1002,15 +990,6 @@ function triggerAbility(u, target, c) {
       }
       break;
     }
-    case 'goldBurst': {
-      const amt = 200 + game.wave * 20;
-      game.gold += amt;
-      log(`🎩 ${d.name} generates a Gold Burst (+${amt}g)!`, 'mythic');
-      spawnPopup(c.x, c.y, `+${amt}g`, '#f5c542');
-      spawnRing(c.x, c.y, 60, '#f5c542', 0.6, 4);
-      spawnParticleBurst(c.x, c.y, '#f5c542', 20);
-      break;
-    }
     case 'starfall': {
       const r = d.range * TILE * 1.5;
       const enemies = game.enemies.filter(e => !e.dead && !e.escaped &&
@@ -1105,16 +1084,6 @@ function triggerSignature(u, target, c) {
         triggerShake(4, 0.2);
         spawnParticleBurst(target.x, target.y, '#ffd166', 16);
         log(`💥 ${d.name} lands a Crushing Slam!`, rarityCls);
-      }
-      break;
-    }
-    case 'wealth': {
-      // Chance to generate gold on hit
-      if (target && !target.dead) {
-        const amt = Math.max(1, Math.floor(unitDamage(u) * 0.1));
-        game.gold += amt;
-        spawnPopup(target.x, target.y - 10, `+${amt}g`, sig.color);
-        log(`💰 ${d.name} loots the target!`, rarityCls);
       }
       break;
     }
@@ -1604,6 +1573,16 @@ function spawnRing(x, y, maxRadius, color, life = 0.45, width = 3) {
   game.rings.push({ x, y, radius: 0, maxRadius, color, life, maxLife: life, width });
 }
 
+function spawnCoin(x, y) {
+  game.particles.push({
+    x, y, color: '#ffd166', glyph: '🪙',
+    vx: (Math.random() - 0.5) * 30,
+    vy: -80,
+    life: 0.8, maxLife: 0.8,
+    size: 14,
+  });
+}
+
 function triggerShake(intensity, time) {
   if (game.shake.intensity * (game.shake.time || 0) < intensity * time) {
     game.shake.intensity = intensity;
@@ -1810,7 +1789,7 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
     ctx.fillStyle = '#ff8a3a';
     ctx.beginPath(); ctx.moveTo(0, -size * 0.35); ctx.lineTo(size * 0.2, -size * 0.3); ctx.lineTo(0, -size * 0.25); ctx.closePath(); ctx.fill();
   } else {
-    // --- Base Humanoid / Wealth ---
+    // --- Base Humanoid ---
     // Arms (drawn behind torso)
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = size * 0.12;
@@ -1925,20 +1904,6 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
       ctx.beginPath(); ctx.arc(-size * 0.5, 0, size * 0.3, 0, Math.PI * 2); // Muscle L
       ctx.arc(size * 0.5, 0, size * 0.3, 0, Math.PI * 2); // Muscle R
       ctx.fill(); ctx.stroke();
-    }
-  } else if (d.family === 'wealth') {
-    if (d.id === 'bandit_c') { // Piggy Bank
-      ctx.fillStyle = '#ffb6c1';
-      ctx.beginPath(); ctx.arc(-size * 0.25, -size * 0.55, size * 0.1, 0, Math.PI * 2); ctx.fill(); // Ear L
-      ctx.beginPath(); ctx.arc(size * 0.25, -size * 0.55, size * 0.1, 0, Math.PI * 2); ctx.fill(); // Ear R
-      ctx.fillStyle = '#ffc0cb';
-      ctx.beginPath(); ctx.ellipse(0, -size * 0.35, size * 0.15, size * 0.1, 0, 0, Math.PI * 2); ctx.fill(); // Snout
-    } else if (d.id === 'bandit_m') { // Monopoly Man
-      ctx.fillStyle = '#000';
-      ctx.fillRect(-size * 0.35, -size * 0.85, size * 0.7, size * 0.3); // Top Hat
-      ctx.fillRect(-size * 0.5, -size * 0.6, size * 1.0, size * 0.08); // Brim
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(-size * 0.2, -size * 0.35); ctx.lineTo(size * 0.2, -size * 0.35); ctx.stroke(); // Moustache
     }
   } else if (d.family === 'arcane') {
     if (d.id === 'arc_c' || d.id === 'arc_r') { // Apprentice/Wizard
@@ -2267,10 +2232,17 @@ function drawParticles(ctx) {
   for (const p of game.particles) {
     const alpha = Math.max(0, p.life / p.maxLife);
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fill();
+    if (p.glyph) {
+      ctx.font = `${p.size}px ${EMOJI_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.glyph, p.x, p.y);
+    } else {
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   ctx.globalAlpha = 1;
 }
