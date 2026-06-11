@@ -268,9 +268,37 @@ const ARTIFACTS = {
     name: 'Money Gun',
     glyph: '💸',
     desc: 'Global ATK multiplier for every guardian. Scales with your gold pile.',
-    multAt: (lvl, gold) => 1 + (lvl * 0.022) * Math.sqrt(Math.max(0, gold) / 600),
+    multAt: (lvl, gold) => 1 + (lvl * 0.035) * Math.sqrt(Math.max(0, gold) / 600),
     effectAt: (lvl, gold) => `×${ARTIFACTS.mg.multAt(lvl, gold).toFixed(2)} ATK`,
     upgradeCost: (lvl) => 5 + 2 * lvl,
+  },
+  at: {
+    id: 'at',
+    name: 'Attack Tower',
+    glyph: '🗼',
+    desc: 'Increases all unit damage globally.',
+    dmgMultAt: (lvl) => 1 + lvl * 0.05,
+    effectAt: (lvl) => `+${(lvl * 5)}% Global DMG`,
+    upgradeCost: (lvl) => 10 + 5 * lvl,
+  },
+  oc: {
+    id: 'oc',
+    name: 'Overclock',
+    glyph: '⚙️',
+    desc: 'Increases all unit attack speed globally.',
+    apsMultAt: (lvl) => 1 + lvl * 0.03,
+    effectAt: (lvl) => `+${(lvl * 3)}% Global APS`,
+    upgradeCost: (lvl) => 10 + 5 * lvl,
+  },
+  bh: {
+    id: 'bh',
+    name: 'Bounty Hunter',
+    glyph: '🤠',
+    desc: 'Start each run with extra Gold and Luck Stones.',
+    goldAt: (lvl) => lvl * 10,
+    stonesAt: (lvl) => Math.floor(lvl / 3),
+    effectAt: (lvl) => `+${lvl * 10} Start Gold, +${Math.floor(lvl/3)} Start Stones`,
+    upgradeCost: (lvl) => 10 + 5 * lvl,
   },
   cm: {
     id: 'cm',
@@ -291,7 +319,7 @@ const ARTIFACTS = {
     upgradeCost: (lvl) => 6 + 3 * lvl,
   },
 };
-const ARTIFACT_ORDER = ['sb', 'mg', 'cm', 'ep'];
+const ARTIFACT_ORDER = ['sb', 'mg', 'at', 'oc', 'bh', 'cm', 'ep'];
 
 /* === Achievements (cumulative; persisted across runs) === */
 const ACHIEVEMENTS = [
@@ -335,6 +363,8 @@ function saveProgress() {
       difficulty: game.difficulty,
       mapId: game.mapId,
       coop: { enabled: game.coop.enabled },
+      gems: game.gems,
+      tokens: game.tokens,
     }));
   } catch {}
 }
@@ -415,9 +445,11 @@ const game = {
   lastTime: 0,
   golem: { cooldown: GOLEM_COOLDOWN, active: false, kills: 0 },
   dungeon: { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1 }, kills: 0 },
+  gems: 0,
+  tokens: 0,
   artifacts: { sb: 0, mg: 0 },
   achievements: {},
-  stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0 },
+  stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, unitLevels: {} },
   difficulty: 'normal',
   mapId: 'wind',
   particles: [],
@@ -494,10 +526,14 @@ function spawnDelay(kind) {
 
 function makeEnemy(kind, wave) {
   const diff = DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal;
+  const isNormal = game.difficulty === 'normal';
+  const normalScale = isNormal ? 1.075 : 1.088;
+  const eliteScale = isNormal ? 1.085 : 1.098;
+  const bossScale = isNormal ? 1.10 : 1.118;
   const tuning = {
-    normal: { hp: 10 * Math.pow(1.088, wave - 1), speed: 88, size: 16, def: Math.floor(wave * 0.55), magicRes: 0,                          color: '#e25555', glyph: '🐛' },
-    elite:  { hp: 40 * Math.pow(1.098, wave - 1), speed: 70, size: 20, def: Math.floor(wave * 0.80), magicRes: wave >= 35 ? 0.18 : 0,      color: '#7a55c4', glyph: '💧' },
-    boss:   { hp: 120* Math.pow(1.118, wave - 1), speed: 42, size: 28, def: Math.floor(wave * 1.00), magicRes: wave >= 40 ? 0.30 : (wave >= 20 ? 0.15 : 0), color: '#1a1a1a', glyph: '💀' },
+    normal: { hp: 10 * Math.pow(normalScale, wave - 1), speed: 88, size: 16, def: Math.floor(wave * 0.55), magicRes: 0,                          color: '#e25555', glyph: '🐛' },
+    elite:  { hp: 40 * Math.pow(eliteScale, wave - 1), speed: 70, size: 20, def: Math.floor(wave * 0.80), magicRes: wave >= 35 ? 0.18 : 0,      color: '#7a55c4', glyph: '💧' },
+    boss:   { hp: 120* Math.pow(bossScale, wave - 1), speed: 42, size: 28, def: Math.floor(wave * 1.00), magicRes: wave >= 40 ? 0.30 : (wave >= 20 ? 0.15 : 0), color: '#1a1a1a', glyph: '💀' },
   }[kind];
   const hpMult = kind === 'boss' ? diff.bossHp : diff.enemyHp;
   const hp = tuning.hp * hpMult;
@@ -669,7 +705,8 @@ function onEnemyKilled(enemy, killer) {
     const reward = Math.round((20 + game.wave * 1.2) * rewardMult);
     game.gold += reward;
     game.stones += 1;
-    log(`Boss defeated (+${reward}g, +1 stone)`, 'gold');
+    game.gems = (game.gems || 0) + 5;
+    log(`Boss defeated (+${reward}g, +1 stone, +5 gems)`, 'gold');
     completeMission('beatBoss');
   } else if (enemy.kind === 'golem') {
     const reward = Math.round((35 + game.wave * 1.8) * rewardMult);
@@ -695,6 +732,11 @@ function unitDamage(unit) {
   if (d.rarity === 'Common' || d.rarity === 'Rare') dmg *= 1 + 0.14 * game.upgrades.Common;
   else if (d.rarity === 'Epic')                     dmg *= 1 + 0.14 * game.upgrades.Epic;
   else                                              dmg *= 1 + 0.16 * game.upgrades.Mythic;
+
+  const famLvl = game.stats.unitLevels[d.family] || 1;
+  dmg *= (1 + (famLvl - 1) * 0.04);
+  dmg *= (ARTIFACTS.at.dmgMultAt(game.artifacts.at || 0));
+
   dmg *= ARTIFACTS.mg.multAt(game.artifacts.mg, game.gold);
   if (d.variable) dmg *= 0.5 + Math.random();
   return dmg;
@@ -820,7 +862,9 @@ function updateUnits(dt) {
       triggerSignature(u, target, c);
     }
 
-    u.cooldown = 1 / d.aps;
+    const famLvl = game.stats.unitLevels[d.family] || 1;
+    const apsBonus = (1 + (famLvl - 1) * 0.02) * ARTIFACTS.oc.apsMultAt(game.artifacts.oc || 0);
+    u.cooldown = 1 / (d.aps * apsBonus);
     u.flash = 0.1;
   }
 }
@@ -1447,17 +1491,17 @@ function upgrade(tier) {
 function upgradeArtifact(id) {
   const def = ARTIFACTS[id];
   if (!def) return;
-  const lvl = game.artifacts[id];
+  const lvl = game.artifacts[id] || 0;
   if (lvl >= ARTIFACT_MAX_LEVEL) return;
   const cost = def.upgradeCost(lvl);
-  if (game.stones < cost) return;
-  game.stones -= cost;
+  if ((game.gems || 0) < cost) return;
+  game.gems -= cost;
   game.artifacts[id] = lvl + 1;
-  log(`${def.name} → Lv ${lvl + 1}`, 'stone');
   if (id === 'sb' && game.artifacts.sb >= 5) unlock('sbMax');
   if (id === 'mg' && game.artifacts.mg >= 5) unlock('mgMax');
   saveProgress();
-  renderArtifacts();
+  if (game.view === 'welcome') refreshWelcome();
+  else renderArtifacts();
   updateUI();
 }
 
@@ -1672,53 +1716,143 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
   const scaleX = 1 - Math.sin(t * 8) * 0.05;
   ctx.scale(scaleX, scaleY);
 
-  // --- Base Humanoid Rendering ---
   const bodyColor = fam.color;
   const skinColor = '#ffdbac';
   const eyeColor  = '#1c2436';
   const eyeSize   = size / 12;
 
-  // Arms (drawn behind torso)
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = size * 0.12;
-  ctx.lineCap = 'round';
-  // Left arm
-  ctx.beginPath(); ctx.moveTo(-size * 0.25, -size * 0.1); ctx.lineTo(-size * 0.45, size * 0.15); ctx.stroke();
-  // Right arm
-  ctx.beginPath(); ctx.moveTo(size * 0.25, -size * 0.1); ctx.lineTo(size * 0.45, size * 0.15); ctx.stroke();
-
-  // Torso
-  ctx.fillStyle = bodyColor;
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  if (ctx.roundRect) {
-    ctx.roundRect(-size * 0.3, -size * 0.2, size * 0.6, size * 0.55, size * 0.15);
+  if (d.family === 'frost') {
+    // --- Wizard (Humanoid with Robes and Pointed Hat) ---
+    // Robe (torso replacement)
+    ctx.fillStyle = bodyColor;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.35, size * 0.35);
+    ctx.lineTo(0, -size * 0.2);
+    ctx.lineTo(size * 0.35, size * 0.35);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // Head
+    ctx.fillStyle = skinColor;
+    ctx.beginPath(); ctx.arc(0, -size * 0.35, size * 0.25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Pointed Hat
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.4, -size * 0.45);
+    ctx.lineTo(0, -size * 0.85);
+    ctx.lineTo(size * 0.4, -size * 0.45);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // Eyes
+    ctx.fillStyle = eyeColor;
+    ctx.beginPath(); ctx.arc(-size * 0.08, -size * 0.35, eyeSize, 0, Math.PI * 2); ctx.arc(size * 0.08, -size * 0.35, eyeSize, 0, Math.PI * 2); ctx.fill();
+  } else if (d.family === 'burn') {
+    // --- Robot (Boxy bodies and antennas) ---
+    ctx.fillStyle = '#777';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    // Boxy body
+    ctx.beginPath(); ctx.rect(-size * 0.35, -size * 0.2, size * 0.7, size * 0.5); ctx.fill(); ctx.stroke();
+    // Boxy head
+    ctx.beginPath(); ctx.rect(-size * 0.25, -size * 0.55, size * 0.5, size * 0.3); ctx.fill(); ctx.stroke();
+    // Antenna
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, -size * 0.55); ctx.lineTo(0, -size * 0.75); ctx.stroke();
+    ctx.fillStyle = bodyColor; ctx.beginPath(); ctx.arc(0, -size * 0.75, 4, 0, Math.PI * 2); ctx.fill();
+    // Glowing Visor
+    ctx.fillStyle = '#0ff';
+    ctx.fillRect(-size * 0.18, -size * 0.48, size * 0.36, size * 0.08);
+  } else if (d.family === 'sniper') {
+    // --- Archer (Humanoid with Hood and Cape) ---
+    ctx.fillStyle = bodyColor;
+    // Cape
+    ctx.beginPath(); ctx.moveTo(-size * 0.4, -size * 0.2); ctx.lineTo(-size * 0.5, size * 0.4); ctx.lineTo(size * 0.5, size * 0.4); ctx.lineTo(size * 0.4, -size * 0.2); ctx.fill();
+    // Torso
+    ctx.fillStyle = '#444'; ctx.beginPath(); ctx.rect(-size * 0.25, -size * 0.2, size * 0.5, size * 0.5); ctx.fill();
+    // Head
+    ctx.fillStyle = skinColor; ctx.beginPath(); ctx.arc(0, -size * 0.4, size * 0.25, 0, Math.PI * 2); ctx.fill();
+    // Hood
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath(); ctx.arc(0, -size * 0.42, size * 0.28, Math.PI, 0, true);
+    ctx.lineTo(size * 0.28, -size * 0.2); ctx.lineTo(-size * 0.28, -size * 0.2); ctx.closePath(); ctx.fill();
+    // Eyes
+    ctx.fillStyle = eyeColor; ctx.beginPath(); ctx.arc(-size * 0.08, -size * 0.4, eyeSize, 0, Math.PI * 2); ctx.arc(size * 0.08, -size * 0.4, eyeSize, 0, Math.PI * 2); ctx.fill();
+  } else if (d.family === 'bruiser') {
+    // --- Animal (Bulky shapes, ears) ---
+    ctx.fillStyle = bodyColor;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    // Bulky body
+    ctx.beginPath(); ctx.ellipse(0, 0, size * 0.45, size * 0.35, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Bulky head
+    ctx.beginPath(); ctx.arc(0, -size * 0.35, size * 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Ears
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.25, -size * 0.55); ctx.lineTo(-size * 0.15, -size * 0.75); ctx.lineTo(-size * 0.05, -size * 0.55);
+    ctx.moveTo(size * 0.25, -size * 0.55); ctx.lineTo(size * 0.15, -size * 0.75); ctx.lineTo(size * 0.05, -size * 0.55);
+    ctx.fill(); ctx.stroke();
+    // Eyes
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-size * 0.1, -size * 0.35, eyeSize * 1.5, 0, Math.PI * 2); ctx.arc(size * 0.1, -size * 0.35, eyeSize * 1.5, 0, Math.PI * 2); ctx.fill();
+  } else if (d.family === 'arcane') {
+    // --- Bird (Avian features, wings) ---
+    ctx.fillStyle = bodyColor;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    // Body (egg shape)
+    ctx.beginPath(); ctx.ellipse(0, 0, size * 0.35, size * 0.45, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Wings
+    ctx.beginPath(); ctx.ellipse(-size * 0.4, -size * 0.05, size * 0.2, size * 0.3, Math.PI / 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(size * 0.4, -size * 0.05, size * 0.2, size * 0.3, -Math.PI / 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Head
+    ctx.beginPath(); ctx.arc(0, -size * 0.4, size * 0.25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Beak
+    ctx.fillStyle = '#ff8a3a';
+    ctx.beginPath(); ctx.moveTo(0, -size * 0.35); ctx.lineTo(size * 0.2, -size * 0.3); ctx.lineTo(0, -size * 0.25); ctx.closePath(); ctx.fill();
   } else {
-    ctx.rect(-size * 0.3, -size * 0.2, size * 0.6, size * 0.55);
+    // --- Base Humanoid / Wealth ---
+    // Arms (drawn behind torso)
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = size * 0.12;
+    ctx.lineCap = 'round';
+    // Left arm
+    ctx.beginPath(); ctx.moveTo(-size * 0.25, -size * 0.1); ctx.lineTo(-size * 0.45, size * 0.15); ctx.stroke();
+    // Right arm
+    ctx.beginPath(); ctx.moveTo(size * 0.25, -size * 0.1); ctx.lineTo(size * 0.45, size * 0.15); ctx.stroke();
+
+    // Torso
+    ctx.fillStyle = bodyColor;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(-size * 0.3, -size * 0.2, size * 0.6, size * 0.55, size * 0.15);
+    } else {
+      ctx.rect(-size * 0.3, -size * 0.2, size * 0.6, size * 0.55);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    // Head
+    ctx.fillStyle = skinColor;
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.45, size * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Hair/Hat (family-colored base)
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.45, size * 0.28, Math.PI, 0);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = eyeColor;
+    ctx.beginPath();
+    ctx.arc(-size * 0.1, -size * 0.45, eyeSize, 0, Math.PI * 2);
+    ctx.arc(size * 0.1, -size * 0.45, eyeSize, 0, Math.PI * 2);
+    ctx.fill();
   }
-  ctx.fill();
-  ctx.stroke();
-
-  // Head
-  ctx.fillStyle = skinColor;
-  ctx.beginPath();
-  ctx.arc(0, -size * 0.45, size * 0.28, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // Hair/Hat (family-colored base)
-  ctx.fillStyle = bodyColor;
-  ctx.beginPath();
-  ctx.arc(0, -size * 0.45, size * 0.28, Math.PI, 0);
-  ctx.fill();
-
-  // Eyes
-  ctx.fillStyle = eyeColor;
-  ctx.beginPath();
-  ctx.arc(-size * 0.1, -size * 0.45, eyeSize, 0, Math.PI * 2);
-  ctx.arc(size * 0.1, -size * 0.45, eyeSize, 0, Math.PI * 2);
-  ctx.fill();
 
   // Family-specific Equipment
   if (d.family === 'frost') {
@@ -2713,15 +2847,16 @@ function renderDungeonStatus() {
   if (fill) fill.style.width = `${Math.max(0, boss.hp / boss.maxHp) * 100}%`;
 }
 
-function renderArtifacts() {
+function renderArtifacts(targetId = 'artifacts-body') {
   const rows = ARTIFACT_ORDER.map(id => {
     const a = ARTIFACTS[id];
-    const lvl = game.artifacts[id];
+    const lvl = game.artifacts[id] || 0;
     const cost = a.upgradeCost(lvl);
     const maxed = lvl >= ARTIFACT_MAX_LEVEL;
-    const effectNow  = lvl  > 0 ? a.effectAt(lvl,     game.gold) : '—';
+    const effectNow  = lvl  > 0 ? a.effectAt(lvl, game.gold) : '—';
     const effectNext = maxed ? '' : a.effectAt(lvl + 1, game.gold);
-    const canBuy = !maxed && game.stones >= cost;
+    const canBuy = !maxed && (game.gems || 0) >= cost;
+    const currencyIcon = '💎';
     return `<li class="artifact-row">
       <span class="glyph" style="border-color:${RARITY_COLORS.Legendary}">${a.glyph}</span>
       <div class="meta">
@@ -2731,12 +2866,14 @@ function renderArtifacts() {
       </div>
       ${maxed
         ? '<button class="artifact-buy" disabled>Maxed</button>'
-        : `<button class="artifact-buy" data-artifact="${id}" ${canBuy ? '' : 'disabled'}>+1 <span class="cost">${cost}🔷</span></button>`}
+        : `<button class="artifact-buy" data-artifact="${id}" ${canBuy ? '' : 'disabled'}>+1 <span class="cost">${cost}${currencyIcon}</span></button>`}
     </li>`;
   }).join('');
-  ui.artifactsBody.innerHTML = `<ul class="artifact-list">${rows}</ul>
-    <p class="hint">Artifacts persist across runs. Spend Luck Stones to level them up.</p>`;
-  ui.artifactsBody.querySelectorAll('[data-artifact]').forEach(btn => {
+  const container = document.getElementById(targetId);
+  if (!container) return;
+  container.innerHTML = `<ul class="artifact-list">${rows}</ul>
+    <p class="hint">Artifacts persist across runs. Spend Gems to level them up.</p>`;
+  container.querySelectorAll('[data-artifact]').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); upgradeArtifact(btn.dataset.artifact); });
   });
 }
@@ -2836,18 +2973,29 @@ function endGame(victory) {
   if (game.selectedUnit) { game.selectedUnit = null; renderUnitInfo(); }
   ui.gameOver.hidden = false;
   ui.endTitle.textContent = victory ? 'Victory!' : 'Defeat';
-  ui.endText.textContent  = victory
-    ? `The codebase is secured. Wave ${game.wave} cleared.`
-    : `The codebase is overrun on wave ${game.wave}.`;
+
+  const earnedTokens = Math.floor(game.wave / 2);
+  const earnedGems = Math.floor(game.wave / 4);
+  game.tokens = (game.tokens || 0) + earnedTokens;
+  game.gems = (game.gems || 0) + earnedGems;
+
+  ui.endText.innerHTML = `
+    ${victory ? `The codebase is secured. Wave ${game.wave} cleared.` : `The codebase is overrun on wave ${game.wave}.`}
+    <div style="margin-top: 12px; font-weight: 700; color: #fff;">
+      Rewards: <span style="color: #6bd1ff">${earnedGems} Gems</span>, <span style="color: #ffd166">${earnedTokens} Tokens</span>
+    </div>
+  `;
+
   if (victory) unlock('victory');
   saveProgress();
   updateUI();
 }
 
 function restart() {
-  game.gold = STARTING_GOLD;
-  game.waveStartGold = STARTING_GOLD;
-  game.stones = 0;
+  const bhLvl = game.artifacts.bh || 0;
+  game.gold = STARTING_GOLD + bhLvl * 10;
+  game.waveStartGold = game.gold;
+  game.stones = Math.floor(bhLvl / 3);
   game.hp = STARTING_HP;
   game.wave = 1;
   game.summonCost = SUMMON_COST_START;
@@ -2904,15 +3052,56 @@ function showView(name) {
   if (name === 'welcome') refreshWelcome();
 }
 
+function upgradeUnitFamily(id) {
+  const lvl = game.stats.unitLevels[id] || 1;
+  if (lvl >= 15) return;
+  const cost = lvl; // 1 token per current level
+  if ((game.tokens || 0) < cost) return;
+  game.tokens -= cost;
+  game.stats.unitLevels[id] = lvl + 1;
+  saveProgress();
+  refreshWelcome();
+  updateUI();
+}
+
+function renderGuardians() {
+  const container = document.getElementById('welcome-guardians');
+  if (!container) return;
+  const rows = Object.values(FAMILIES).map(f => {
+    const lvl = game.stats.unitLevels[f.id] || 1;
+    const maxed = lvl >= 15;
+    const cost = lvl;
+    const canBuy = !maxed && (game.tokens || 0) >= cost;
+    return `<li class="artifact-row">
+      <span class="glyph" style="border-color:${f.color}">${SIGNATURE[f.id].glyph}</span>
+      <div class="meta">
+        <div class="name">${f.name} <span class="lvl">Lv ${lvl}${maxed ? ' · MAX' : ''}</span></div>
+        <div class="desc">${f.desc}</div>
+        <div class="effect">Bonus: <b>+${(lvl - 1) * 4}% DMG, +${(lvl - 1) * 2}% APS</b></div>
+      </div>
+      ${maxed
+      ? '<button class="artifact-buy" disabled>Maxed</button>'
+      : `<button class="artifact-buy" data-family="${f.id}" ${canBuy ? '' : 'disabled'}>+1 <span class="cost">${cost}🪙</span></button>`}
+    </li>`;
+  }).join('');
+  container.innerHTML = `<ul class="artifact-list">${rows}</ul>
+    <p class="hint">Level up your guardian families permanently using Tokens.</p>`;
+  container.querySelectorAll('[data-family]').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); upgradeUnitFamily(btn.dataset.family); });
+  });
+}
+
 function refreshWelcome() {
   renderDifficulty();
   renderMaps();
   renderFamilies();
+  renderGuardians();
   renderAchievements();
-  const sb = document.getElementById('welcome-sb');
-  const mg = document.getElementById('welcome-mg');
-  if (sb) sb.textContent = game.artifacts.sb;
-  if (mg) mg.textContent = game.artifacts.mg;
+  renderArtifacts('welcome-artifacts');
+  const gemDisp = document.getElementById('welcome-gems');
+  const tokDisp = document.getElementById('welcome-tokens');
+  if (gemDisp) gemDisp.textContent = game.gems || 0;
+  if (tokDisp) tokDisp.textContent = game.tokens || 0;
   if (ui.coopToggle) ui.coopToggle.checked = game.coop.enabled;
   const resumeBtn = document.getElementById('resume-run');
   const startBtn  = document.getElementById('start-run');
@@ -2960,9 +3149,12 @@ function init() {
     if (saved.artifacts)    game.artifacts    = Object.assign(game.artifacts, saved.artifacts);
     if (saved.achievements) game.achievements = saved.achievements;
     if (saved.stats)        game.stats        = Object.assign(game.stats, saved.stats);
+    if (!game.stats.unitLevels) game.stats.unitLevels = {};
     if (saved.difficulty && DIFFICULTIES[saved.difficulty]) game.difficulty = saved.difficulty;
     if (saved.mapId && MAPS[saved.mapId]) game.mapId = saved.mapId;
     if (saved.coop)         game.coop.enabled = !!saved.coop.enabled;
+    if (saved.gems !== undefined) game.gems = saved.gems;
+    if (saved.tokens !== undefined) game.tokens = saved.tokens;
   }
   setMap(game.mapId);
   game.missions = makeMissions();
