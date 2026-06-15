@@ -157,6 +157,8 @@ const UNITS = {
   // ── Immortals (merge-only)
   haley:   { id: 'haley',   family: 'bruiser',name: 'Immortal Haley',rarity: 'Immortal',  dmg: 220, range: 1.6, aps: 0.8, type: 'physical', variable: true, manaMax: 5, ability: 'crushingBlow', glyph: '🦸' },
   ato:     { id: 'ato',     family: 'arcane', name: 'Immortal Ato', rarity: 'Immortal',  dmg: 140, range: 3.0, aps: 1.0, type: 'magic',    variable: true, aoe: 1.2, manaMax: 10, ability: 'starfall', glyph: '🦋' },
+  angel:   { id: 'angel',   family: 'arcane', name: 'Archangel',    rarity: 'Immortal',  dmg: 110, range: 4.0, aps: 1.8, type: 'magic',    variable: true, aoe: 1.5, burn: { dps: 30, duration: 3.0 }, slow: { amount: 0.40, duration: 2.0 }, manaAura: 5.0, glyph: '👼' },
+  vulcan:  { id: 'vulcan',  family: 'burn',   name: 'Vulcan',       rarity: 'Immortal',  dmg: 300, range: 3.0, aps: 0.6, type: 'magic',    variable: true, aoe: 2.0, burn: { dps: 80, duration: 4.0 }, manaMax: 8, ability: 'infernoBlast', glyph: '🌋' },
 };
 
 const POOLS = {
@@ -165,7 +167,7 @@ const POOLS = {
   Epic:      ['frost_e', 'burn_e', 'sniper_e', 'bruis_e', 'arc_e'],
   Legendary: ['frost_l', 'burn_l', 'sniper_l', 'bruis_l', 'arc_l'],
   Mythic:    ['frost_m', 'burn_m', 'sniper_m', 'bruis_m', 'arc_m'],
-  Immortal:  ['haley', 'ato'],
+  Immortal:  ['haley', 'ato', 'angel', 'vulcan'],
 };
 
 const ABILITY_DESCRIPTIONS = {
@@ -227,8 +229,10 @@ const MYTHIC_RECIPES = {
 
 /* Immortal Recipes */
 const IMMORTAL_RECIPES = {
-  haley: { ingredients: ['bruis_m', 'sniper_m'], stones: 15, result: 'haley' },
-  ato:   { ingredients: ['arc_m', 'frost_m'],   stones: 15, result: 'ato' },
+  haley:  { ingredients: ['bruis_m', 'sniper_m'], stones: 15, result: 'haley' },
+  ato:    { ingredients: ['arc_m', 'frost_m'],   stones: 15, result: 'ato' },
+  angel:  { ingredients: ['frost_e', 'burn_e', 'sniper_e', 'bruis_e', 'arc_e'], stones: 15, result: 'angel' },
+  vulcan: { ingredients: ['burn_m', 'arc_m'],    stones: 15, result: 'vulcan' },
 };
 
 /* === Artifacts (persisted across runs via localStorage) === */
@@ -1878,6 +1882,20 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
         ctx.fillStyle = '#ff7e3a';
         ctx.beginPath(); ctx.arc(size * 0.8, -size * 0.02, size * 0.1, 0, Math.PI * 2); ctx.fill();
       }
+    } else if (d.id === 'vulcan') { // Vulcan
+      // Magma core body
+      ctx.fillStyle = '#222';
+      ctx.fillRect(-size * 0.5, -size * 0.2, size, size * 0.6); // Blocky armor
+      // Glowing magma cracks
+      ctx.strokeStyle = '#ff4500';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.3, 0); ctx.lineTo(-size * 0.1, size * 0.2); ctx.lineTo(size * 0.2, -size * 0.1); ctx.lineTo(size * 0.4, size * 0.1);
+      ctx.stroke();
+      if (t % 0.6 < 0.3) {
+        ctx.fillStyle = '#ff8a3a';
+        ctx.beginPath(); ctx.arc(0, 0, size * 0.15, 0, Math.PI * 2); ctx.fill(); // Core pulse
+      }
     }
   } else if (d.family === 'sniper') {
     if (d.id === 'sniper_c' || d.id === 'sniper_r') { // Bowman/Marksman
@@ -1917,6 +1935,21 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
       // Robe extensions
       ctx.fillRect(-size * 0.35, size * 0.1, size * 0.1, size * 0.3);
       ctx.fillRect(size * 0.25, size * 0.1, size * 0.1, size * 0.3);
+    } else if (d.id === 'angel') { // Archangel
+      // Wings
+      const wingFlap = Math.sin(t * 10) * 0.2;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(-size * 0.4, -size * 0.2, size * 0.5, size * 0.2, -Math.PI / 4 + wingFlap, 0, Math.PI * 2);
+      ctx.ellipse(size * 0.4, -size * 0.2, size * 0.5, size * 0.2, Math.PI / 4 - wingFlap, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Halo
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, -size * 0.8, size * 0.3, size * 0.1, 0, 0, Math.PI * 2);
+      ctx.stroke();
     }
   }
 
