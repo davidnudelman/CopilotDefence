@@ -1225,8 +1225,15 @@ function mergeSelected() {
   if (!u || !isReadyToMerge(u)) return;
   const d = UNITS[u.id];
   const recipeId = MERGE_RECIPES[u.id];
+  // Only take the standard 3-of-a-kind merge when 3+ are actually present.
+  // Otherwise fall through to the Mythic/Immortal recipe path — this is what
+  // lets recipes whose ingredients also have a standard merge (e.g. the
+  // Epic-based Archangel recipe) actually fire.
+  const sameTypeCount = game.units
+    .filter(x => x.id === u.id)
+    .reduce((s, x) => s + (x.stackCount || 1), 0);
 
-  if (recipeId) {
+  if (recipeId && sameTypeCount >= 3) {
     // Standard 3-of-a-kind merge
     const allOfSameType = game.units.filter(x => x.id === u.id);
 
@@ -2055,19 +2062,29 @@ function drawUnitAt(ctx, u, x, y, ghost = false) {
   const readyToLevel = isReadyToMerge(u);
 
   if (readyToLevel) {
+    // A ready Mythic/Immortal recipe gets a star tinted to its result rarity,
+    // with a pulsing glow; ordinary merges keep the plain yellow star.
+    const recipeRarity = readyRecipeRarity(u);
+    const starColor = recipeRarity ? RARITY_COLORS[recipeRarity] : '#ff0';
     ctx.save();
     ctx.translate(x, y - 30);
     const starT = t * 5;
-    ctx.scale(1 + Math.sin(starT) * 0.1, 1 + Math.sin(starT) * 0.1);
-    ctx.fillStyle = '#ff0';
-    ctx.strokeStyle = '#000';
+    const scaleBoost = recipeRarity ? 0.16 : 0.1;
+    const sizeBoost = recipeRarity ? 1.3 : 1;
+    ctx.scale(1 + Math.sin(starT) * scaleBoost, 1 + Math.sin(starT) * scaleBoost);
+    if (recipeRarity) {
+      ctx.shadowBlur = 10 + 6 * (0.5 + 0.5 * Math.sin(t * 4));
+      ctx.shadowColor = starColor;
+    }
+    ctx.fillStyle = starColor;
+    ctx.strokeStyle = recipeRarity ? '#20140a' : '#000';
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 0; i < 5; i++) {
       const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-      ctx.lineTo(Math.cos(angle) * 8, Math.sin(angle) * 8);
+      ctx.lineTo(Math.cos(angle) * 8 * sizeBoost, Math.sin(angle) * 8 * sizeBoost);
       const angle2 = ((i + 0.5) / 5) * Math.PI * 2 - Math.PI / 2;
-      ctx.lineTo(Math.cos(angle2) * 4, Math.sin(angle2) * 4);
+      ctx.lineTo(Math.cos(angle2) * 4 * sizeBoost, Math.sin(angle2) * 4 * sizeBoost);
     }
     ctx.closePath();
     ctx.fill();
@@ -2392,6 +2409,32 @@ function findUnitAt(x, y, radius = 32) {
     if (d <= radius && d < bestDist) { bestDist = d; best = u; }
   }
   return best;
+}
+
+/* If the selected unit is ready to complete a Mythic/Immortal recipe (rather
+ * than a plain 3-of-a-kind merge), return the rarity of that recipe's result.
+ * Used to tint the "ready" star by the rarity it will forge. */
+function readyRecipeRarity(u) {
+  if (!u) return null;
+  // A standard 3-of-a-kind merge takes priority, so it isn't a recipe.
+  if (MERGE_RECIPES[u.id]) {
+    const cnt = game.units.filter(x => x.id === u.id).reduce((s, x) => s + (x.stackCount || 1), 0);
+    if (cnt >= 3) return null;
+  }
+  const combinedRecipes = { ...MYTHIC_RECIPES, ...IMMORTAL_RECIPES };
+  for (const rid in combinedRecipes) {
+    const r = combinedRecipes[rid];
+    if (!r.ingredients.includes(u.id)) continue;
+    const currentUnits = [...game.units];
+    let possible = true;
+    for (const ingId of r.ingredients) {
+      const idx = currentUnits.findIndex(x => x.id === ingId);
+      if (idx >= 0) currentUnits.splice(idx, 1);
+      else { possible = false; break; }
+    }
+    if (possible && game.stones >= r.stones) return UNITS[r.result].rarity;
+  }
+  return null;
 }
 
 function isReadyToMerge(u) {
@@ -2800,6 +2843,30 @@ function renderFamilies() {
   }).join('');
 }
 
+function renderRecipes() {
+  const list = document.getElementById('welcome-recipes');
+  if (!list) return;
+  const chip = (id) => {
+    const u = UNITS[id];
+    if (!u) return `<span class="recipe-chip">?</span>`;
+    return `<span class="recipe-chip" style="border-color:${RARITY_COLORS[u.rarity]}" title="${u.name} (${u.rarity})">${u.glyph}</span>`;
+  };
+  const section = (title, recipes) =>
+    Object.values(recipes).map(r => {
+      const res = UNITS[r.result];
+      const ings = r.ingredients.map(chip).join('<span class="recipe-plus">+</span>');
+      return `<li class="recipe-row">
+        <span class="recipe-result" style="color:${RARITY_COLORS[res.rarity]}">${res.glyph} ${res.name}</span>
+        <span class="recipe-formula">${ings}<span class="recipe-plus">+</span><span class="recipe-stones">${r.stones}🔷</span></span>
+      </li>`;
+    }).join('');
+  list.innerHTML =
+    `<li class="recipe-group"><span class="recipe-tier" style="color:${RARITY_COLORS.Mythic}">Mythic</span></li>` +
+    section('Mythic', MYTHIC_RECIPES) +
+    `<li class="recipe-group"><span class="recipe-tier" style="color:${RARITY_COLORS.Immortal}">Immortal</span></li>` +
+    section('Immortal', IMMORTAL_RECIPES);
+}
+
 function renderDungeon() {
   const boss = game.dungeon.boss;
   const totalDps = game.dungeon.units.reduce((s, u) => s + dungeonDps(u), 0);
@@ -3042,6 +3109,7 @@ function restart() {
   }
   renderMissions();
   renderFamilies();
+  renderRecipes();
   renderDungeon();
   renderArtifacts();
   renderAchievements();
@@ -3100,6 +3168,7 @@ function refreshWelcome() {
   renderDifficulty();
   renderMaps();
   renderFamilies();
+  renderRecipes();
   renderGuardians();
   renderAchievements();
   renderArtifacts('welcome-artifacts');
