@@ -97,6 +97,16 @@ const DIFFICULTIES = {
 };
 const DIFFICULTY_ORDER = ['normal', 'hard', 'hell'];
 
+/* === Game modes ===
+ * Campaign ends in victory after MAX_WAVES; Endless removes the cap and lets
+ * the existing exponential wave scaling run forever, chasing a best-wave record.
+ */
+const MODES = {
+  campaign: { id: 'campaign', name: 'Campaign', glyph: '🏁', color: '#5f9cf0', desc: `Hold the line through all ${MAX_WAVES} waves to secure the codebase.` },
+  endless:  { id: 'endless',  name: 'Endless',  glyph: '∞',  color: '#b06bf0', desc: 'No wave limit. Enemies scale forever — push for a new best.' },
+};
+const MODE_ORDER = ['campaign', 'endless'];
+
 /* === Unit catalogue ===
  * Five families, each with a Common→Rare→Epic→Legendary→Mythic ladder.
  * Two Immortals branch from the bruiser/arcane Mythics through merges.
@@ -353,6 +363,7 @@ function saveProgress() {
       stats: game.stats,
       difficulty: game.difficulty,
       mapId: game.mapId,
+      mode: game.mode,
       coop: { enabled: game.coop.enabled },
       gems: game.gems,
       tokens: game.tokens,
@@ -440,9 +451,10 @@ const game = {
   tokens: 0,
   artifacts: { sb: 0, mg: 0 },
   achievements: {},
-  stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, unitLevels: {} },
+  stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, unitLevels: {}, endlessBest: 0 },
   difficulty: 'normal',
   mapId: 'wind',
+  mode: 'campaign',
   particles: [],
   rings: [],
   shake: { time: 0, intensity: 0 },
@@ -599,7 +611,7 @@ function checkWaveComplete() {
     if (game.wave === 50) unlock('wave50');
     if (game.wave === 10 && game.difficulty === 'hell') unlock('hellRun');
     if (game.wave === 30 && game.difficulty === 'hard') unlock('hardClear');
-    if (game.wave >= MAX_WAVES) { endGame(true); return; }
+    if (game.mode !== 'endless' && game.wave >= MAX_WAVES) { endGame(true); return; }
     game.wave++;
     game.nextWaveDelay = WAVE_AUTO_DELAY;
     saveProgress();
@@ -2553,6 +2565,7 @@ function setupUI() {
   game.canvas     = ui.canvas;
   game.ctx        = ui.canvas.getContext('2d');
   ui.wave         = document.getElementById('wave-display');
+  ui.waveMax      = document.getElementById('wave-max');
   ui.gold         = document.getElementById('gold-display');
   ui.stones       = document.getElementById('stones-display');
   ui.hp           = document.getElementById('hp-display');
@@ -2673,6 +2686,7 @@ function setupUI() {
 
 function updateUI() {
   ui.wave.textContent = game.wave;
+  if (ui.waveMax) ui.waveMax.textContent = game.mode === 'endless' ? '/∞' : `/${MAX_WAVES}`;
   ui.gold.textContent = Math.floor(game.gold);
   ui.stones.textContent = game.stones;
   ui.hp.textContent = game.hp;
@@ -3005,6 +3019,37 @@ function renderMaps() {
   });
 }
 
+function renderMode() {
+  const container = document.getElementById('welcome-mode');
+  if (!container) return;
+  const resuming = game.runActive && !game.gameOver;
+  container.innerHTML = MODE_ORDER.map(id => {
+    const m = MODES[id];
+    const active = id === game.mode;
+    let stats = '';
+    if (id === 'endless' && game.stats.endlessBest > 0) {
+      stats = `<span class="mode-stats">Best: Wave ${game.stats.endlessBest}</span>`;
+    }
+    return `<button class="mode-card ${active ? 'active' : ''}" type="button" data-mode="${id}" style="--mode-color:${m.color}" ${active ? 'aria-pressed="true"' : ''}>
+      <span class="mode-glyph">${m.glyph}</span>
+      <span class="mode-meta">
+        <span class="mode-name">${m.name}${active ? ' · selected' : ''}</span>
+        <span class="mode-desc">${m.desc}</span>
+        ${stats}
+      </span>
+    </button>`;
+  }).join('') + (resuming ? '<p class="hint">Mode change applies on your next new run.</p>' : '');
+  container.querySelectorAll('[data-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.mode;
+      if (id === game.mode) return;
+      game.mode = id;
+      saveProgress();
+      renderMode();
+    });
+  });
+}
+
 function renderAchievements() {
   const container = document.getElementById('welcome-achievements');
   if (!container) return;
@@ -3044,15 +3089,33 @@ function endGame(victory) {
   closeAllPopups();
   if (game.selectedUnit) { game.selectedUnit = null; renderUnitInfo(); }
   ui.gameOver.hidden = false;
-  ui.endTitle.textContent = victory ? 'Victory!' : 'Defeat';
+
+  const endless = game.mode === 'endless';
+  let newBest = false;
+  if (endless) {
+    if (game.wave > (game.stats.endlessBest || 0)) { game.stats.endlessBest = game.wave; newBest = true; }
+  }
+
+  ui.endTitle.textContent = endless ? 'Run Over' : (victory ? 'Victory!' : 'Defeat');
 
   const earnedTokens = Math.floor(game.wave / 2);
   const earnedGems = Math.floor(game.wave / 4);
   game.tokens = (game.tokens || 0) + earnedTokens;
   game.gems = (game.gems || 0) + earnedGems;
 
+  let headline;
+  if (endless) {
+    headline = `You survived to wave ${game.wave}.` +
+      (newBest ? ' <span style="color:#b06bf0; font-weight:700;">New best!</span>'
+               : ` Best: wave ${game.stats.endlessBest}.`);
+  } else {
+    headline = victory
+      ? `The codebase is secured. Wave ${game.wave} cleared.`
+      : `The codebase is overrun on wave ${game.wave}.`;
+  }
+
   ui.endText.innerHTML = `
-    ${victory ? `The codebase is secured. Wave ${game.wave} cleared.` : `The codebase is overrun on wave ${game.wave}.`}
+    ${headline}
     <div style="margin-top: 12px; font-weight: 700; color: #fff;">
       Rewards: <span style="color: #6bd1ff">${earnedGems} Gems</span>, <span style="color: #ffd166">${earnedTokens} Tokens</span>
     </div>
@@ -3103,7 +3166,9 @@ function restart() {
   ui.gameOver.hidden = true;
   ui.logList.innerHTML = '';
   const diff = DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal;
-  log(`A new ${diff.name} run begins. Build your guardians wisely!`);
+  const modeLabel = game.mode === 'endless' ? 'Endless ' : '';
+  log(`A new ${modeLabel}${diff.name} run begins. Build your guardians wisely!`);
+  if (game.mode === 'endless') log('Endless mode — no wave cap. Survive as long as you can!', 'epic');
   if (game.artifacts.sb > 0 || game.artifacts.mg > 0) {
     log(`Artifacts active — Safe Box Lv ${game.artifacts.sb}, Money Gun Lv ${game.artifacts.mg}`, 'epic');
   }
@@ -3167,6 +3232,7 @@ function renderGuardians() {
 function refreshWelcome() {
   renderDifficulty();
   renderMaps();
+  renderMode();
   renderFamilies();
   renderRecipes();
   renderGuardians();
@@ -3204,8 +3270,9 @@ function resetAllProgress() {
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
   game.artifacts = { sb: 0, mg: 0 };
   game.achievements = {};
-  game.stats = { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0 };
+  game.stats = { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, unitLevels: {}, endlessBest: 0 };
   game.difficulty = 'normal';
+  game.mode = 'campaign';
   refreshWelcome();
 }
 
@@ -3224,8 +3291,10 @@ function init() {
     if (saved.achievements) game.achievements = saved.achievements;
     if (saved.stats)        game.stats        = Object.assign(game.stats, saved.stats);
     if (!game.stats.unitLevels) game.stats.unitLevels = {};
+    if (typeof game.stats.endlessBest !== 'number') game.stats.endlessBest = 0;
     if (saved.difficulty && DIFFICULTIES[saved.difficulty]) game.difficulty = saved.difficulty;
     if (saved.mapId && MAPS[saved.mapId]) game.mapId = saved.mapId;
+    if (saved.mode && MODES[saved.mode]) game.mode = saved.mode;
     if (saved.coop)         game.coop.enabled = !!saved.coop.enabled;
     if (saved.gems !== undefined) game.gems = saved.gems;
     if (saved.tokens !== undefined) game.tokens = saved.tokens;
