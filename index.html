@@ -45,12 +45,15 @@
 
       <section class="welcome-section">
         <h2>Mode</h2>
-        <div class="mode-options">
-          <label class="mode-toggle">
-            <input type="checkbox" id="coop-mode-toggle">
-            <span class="toggle-label">Simulated Co-op (AI Partner)</span>
-          </label>
-        </div>
+        <div id="welcome-mode"></div>
+        <label class="coop-toggle" for="coop-mode-toggle">
+          <span class="coop-text">
+            <span class="coop-title">Simulated Co-op</span>
+            <span class="coop-sub">An AI partner summons &amp; merges alongside you.</span>
+          </span>
+          <input type="checkbox" id="coop-mode-toggle" class="coop-input">
+          <span class="coop-switch" aria-hidden="true"></span>
+        </label>
       </section>
 
       <section class="welcome-section">
@@ -137,7 +140,7 @@
           <span class="title">Copilot Defence</span>
         </button>
         <div class="stats">
-          <div class="stat"><span class="label">Wave</span><span id="wave-display">1</span><span class="dim">/80</span></div>
+          <div class="stat"><span class="label">Wave</span><span id="wave-display">1</span><span class="dim" id="wave-max">/80</span></div>
           <div class="stat"><span class="label">Gold</span><span id="gold-display">50</span></div>
           <div class="stat"><span class="label">Stones</span><span id="stones-display">0</span></div>
           <div class="stat hp"><span class="label">HP</span><span id="hp-display">20</span></div>
