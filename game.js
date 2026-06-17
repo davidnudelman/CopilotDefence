@@ -227,14 +227,16 @@ const MERGE_RECIPES = {
   arc_c:    'arc_r',    arc_r:    'arc_e',    arc_e:    'arc_l',
 };
 
-/* Mythic Recipes — specific combinations of Legendaries needed to summon a Mythic.
- * Format: [LegendaryID_A, LegendaryID_B, LuckStoneCost] */
+/* Mythic Recipes — each Legendary levels up into its own family's Mythic.
+ * Gather three of the same Legendary plus Luck Stones, then merge: the ladder
+ * that runs Common→Rare→Epic→Legendary simply continues one tier further, so
+ * every Legendary has a distinct Mythic it ascends to. */
 const MYTHIC_RECIPES = {
-  frost_m:  { ingredients: ['frost_l', 'arc_l'],  stones: 6, result: 'frost_m' },
-  burn_m:   { ingredients: ['burn_l', 'sniper_l'], stones: 6, result: 'burn_m' },
-  sniper_m: { ingredients: ['sniper_l', 'frost_l'], stones: 6, result: 'sniper_m' },
-  bruis_m:  { ingredients: ['bruis_l', 'burn_l'],  stones: 6, result: 'bruis_m' },
-  arc_m:    { ingredients: ['arc_l', 'bruis_l'],   stones: 6, result: 'arc_m' },
+  frost_m:  { ingredients: ['frost_l',  'frost_l',  'frost_l'],  stones: 6, result: 'frost_m' },
+  burn_m:   { ingredients: ['burn_l',   'burn_l',   'burn_l'],   stones: 6, result: 'burn_m' },
+  sniper_m: { ingredients: ['sniper_l', 'sniper_l', 'sniper_l'], stones: 6, result: 'sniper_m' },
+  bruis_m:  { ingredients: ['bruis_l',  'bruis_l',  'bruis_l'],  stones: 6, result: 'bruis_m' },
+  arc_m:    { ingredients: ['arc_l',    'arc_l',    'arc_l'],    stones: 6, result: 'arc_m' },
 };
 
 /* Immortal Recipes */
@@ -1493,7 +1495,7 @@ function upgradeArtifact(id) {
   if (id === 'mg' && game.artifacts.mg >= 5) unlock('mgMax');
   saveProgress();
   if (game.view === 'welcome') refreshWelcome();
-  else renderArtifacts();
+  else renderRecipeGuide();
   updateUI();
 }
 
@@ -2704,7 +2706,7 @@ function updateUI() {
   ui.upgCommon.disabled   = game.gold < upgradeCostFor('Common') || game.gameOver;
   ui.upgEpic.disabled     = game.gold < upgradeCostFor('Epic')   || game.gameOver;
   ui.upgMythic.disabled   = game.gold < upgradeCostFor('Mythic') || game.gameOver;
-  if (ui.artifactsPopup && ui.artifactsPopup.classList.contains('open')) renderArtifacts();
+  if (ui.artifactsPopup && ui.artifactsPopup.classList.contains('open')) renderRecipeGuide();
   renderUnitInfo();
 }
 
@@ -2743,12 +2745,20 @@ function renderUnitInfo() {
   for (const rid in combinedRecipes) {
     const r = combinedRecipes[rid];
     if (r.ingredients.includes(u.id)) {
-      const ings = r.ingredients.map(ingId => {
+      // Group duplicate ingredients so recipes like 3× Glacier Sage read cleanly
+      // and reflect how many of each you still need.
+      const need = {};
+      for (const ingId of r.ingredients) need[ingId] = (need[ingId] || 0) + 1;
+      const ings = Object.keys(need).map(ingId => {
         const ing = UNITS[ingId];
-        const has = game.units.some(x => x.id === ingId);
-        return `<span style="color: ${has ? '#fff' : '#888'}; text-decoration: ${has ? 'none' : 'line-through'}">${ing.glyph} ${ing.name}</span>`;
+        const req = need[ingId];
+        const have = game.units.filter(x => x.id === ingId).length;
+        const enough = have >= req;
+        const qty = req > 1 ? ` ×${req}` : '';
+        return `<span style="color: ${enough ? '#fff' : '#888'}; text-decoration: ${enough ? 'none' : 'line-through'}">${ing.glyph} ${ing.name}${qty} <span class="dim">(${have}/${req})</span></span>`;
       }).join(' + ');
-      recipeHtml = `<div class="recipe-hint"><b>Recipe for ${UNITS[r.result].name}:</b><br>${ings} + ${r.stones}🔷</div>`;
+      const enoughStones = game.stones >= r.stones;
+      recipeHtml = `<div class="recipe-hint"><b>Levels up to ${UNITS[r.result].name}:</b><br>${ings} + <span style="text-decoration:${enoughStones ? 'none' : 'line-through'}">${r.stones}🔷</span></div>`;
       break;
     }
   }
@@ -2820,7 +2830,7 @@ function setPopup(key, open) {
       game.selectedUnit = null;
       renderUnitInfo();
     }
-    if (key === 'artifacts') renderArtifacts();
+    if (key === 'artifacts') renderRecipeGuide();
     if (key === 'dungeon')   renderDungeon();
   }
   popup.classList.toggle('open', open);
@@ -2962,6 +2972,56 @@ function renderArtifacts(targetId = 'artifacts-body') {
   container.querySelectorAll('[data-artifact]').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); upgradeArtifact(btn.dataset.artifact); });
   });
+}
+
+/* In-game Recipe Guide — replaces the Artifacts panel on the game screen.
+ * Shows, live against the board, how each Legendary levels up into its own
+ * Mythic, and how Mythics/Epics combine into Immortals. */
+function renderRecipeGuide(targetId = 'artifacts-body') {
+  const container = document.getElementById(targetId);
+  if (!container) return;
+  const onBoard = game.units || [];
+
+  const recipeRow = (r) => {
+    const res = UNITS[r.result];
+    // Group duplicate ingredients into "need" counts.
+    const need = {};
+    for (const ingId of r.ingredients) need[ingId] = (need[ingId] || 0) + 1;
+    let haveAll = true;
+    const chips = Object.keys(need).map(ingId => {
+      const ing = UNITS[ingId];
+      const req = need[ingId];
+      const have = onBoard.filter(x => x.id === ingId).length;
+      const ok = have >= req;
+      if (!ok) haveAll = false;
+      return `<span class="rg-chip ${ok ? 'ok' : ''}" style="border-color:${RARITY_COLORS[ing.rarity]}" title="${ing.name} (${ing.rarity})">
+          ${ing.glyph}${req > 1 ? `<span class="rg-x">×${req}</span>` : ''}
+          <span class="rg-have">${have}/${req}</span>
+        </span>`;
+    }).join('<span class="recipe-plus">+</span>');
+    const stonesOk = game.stones >= r.stones;
+    const ready = haveAll && stonesOk;
+    const badge = ready
+      ? '<span class="rg-status ready">Ready ✓</span>'
+      : `<span class="rg-status">${stonesOk ? '' : 'Need stones'}</span>`;
+    return `<li class="rg-row ${ready ? 'is-ready' : ''}">
+        <span class="rg-result" style="color:${RARITY_COLORS[res.rarity]}">${res.glyph} ${res.name}</span>
+        <span class="rg-formula">${chips}<span class="recipe-plus">+</span><span class="rg-stones ${stonesOk ? 'ok' : ''}">${r.stones}🔷</span></span>
+        ${badge}
+      </li>`;
+  };
+
+  const section = (tier, recipes) =>
+    `<li class="rg-group"><span class="rg-tier" style="color:${RARITY_COLORS[tier]}">${tier}</span></li>` +
+    Object.values(recipes).map(recipeRow).join('');
+
+  container.innerHTML = `
+    <p class="rg-note">Each Legendary levels up into its own Mythic. Place every ingredient on the board, hold the Luck Stones (🔷), then select an ingredient and <b>Merge</b>.</p>
+    <ul class="rg-list">
+      ${section('Mythic', MYTHIC_RECIPES)}
+      ${section('Immortal', IMMORTAL_RECIPES)}
+    </ul>
+    <p class="hint">Tip: Commons→Legendaries advance by merging three of a kind. You have <b>${game.stones}🔷</b>.</p>`;
 }
 
 function renderDifficulty() {
@@ -3176,7 +3236,7 @@ function restart() {
   renderFamilies();
   renderRecipes();
   renderDungeon();
-  renderArtifacts();
+  renderRecipeGuide();
   renderAchievements();
   updateUI();
 }
@@ -3303,7 +3363,7 @@ function init() {
   game.missions = makeMissions();
   renderMissions();
   renderDungeon();
-  renderArtifacts();
+  renderRecipeGuide();
   updateUI();
   log('Welcome to Copilot Defence!');
   if (game.artifacts.sb > 0 || game.artifacts.mg > 0) {

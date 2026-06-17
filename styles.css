@@ -454,6 +454,53 @@ kbd {
 .recipe-list .recipe-plus { color: var(--text-dim); font-weight: 700; }
 .recipe-list .recipe-stones { font-weight: 700; white-space: nowrap; }
 
+/* === In-game Recipe Guide (Recipes panel) === */
+.rg-note { color: var(--text-dim); font-size: 12.5px; margin: 0 0 10px; line-height: 1.4; }
+.rg-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.rg-group { padding: 10px 0 2px; }
+.rg-tier {
+  font-weight: 800; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.rg-row {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 6px 10px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.rg-row.is-ready { background: rgba(244,155,58,0.08); border-radius: 8px; padding-left: 6px; padding-right: 6px; }
+.rg-result { font-weight: 700; flex: 1 1 auto; min-width: 120px; }
+.rg-formula { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.rg-chip {
+  position: relative;
+  display: inline-grid; place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  border: 2px solid var(--text-dim);
+  background: rgba(255,255,255,0.04);
+  font-size: 15px;
+  opacity: 0.55;
+}
+.rg-chip.ok { opacity: 1; }
+.rg-chip .rg-x {
+  position: absolute; bottom: -2px; right: -4px;
+  font-size: 9px; font-weight: 800;
+  background: #1c2740; border-radius: 6px; padding: 0 2px;
+}
+.rg-chip .rg-have {
+  position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+  font-size: 9px; font-weight: 700; color: var(--text-dim);
+  white-space: nowrap;
+}
+.rg-chip.ok .rg-have { color: var(--good, #4ed188); }
+.rg-stones { font-weight: 700; white-space: nowrap; opacity: 0.55; }
+.rg-stones.ok { opacity: 1; }
+.rg-status {
+  margin-left: auto; font-size: 11px; font-weight: 700;
+  color: var(--text-dim); white-space: nowrap;
+}
+.rg-status.ready { color: #4ed188; }
+
 .ach-list { font-size: 13px; }
 .ach-list li {
   display: grid;
