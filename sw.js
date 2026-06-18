@@ -1,4 +1,4 @@
-const CACHE = 'copilot-defence-v2';
+const CACHE = 'copilot-defence-v3';
 const ASSETS = [
   './',
   'index.html',
