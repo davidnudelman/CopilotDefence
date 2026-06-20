@@ -508,6 +508,44 @@ function log(text, cls = '') {
   ui.logList.parentElement.scrollTop = ui.logList.parentElement.scrollHeight;
 }
 
+/* === Enemy archetypes & variety ===
+ * Golems come in five flavours, each immune to one counter, so a one-trick
+ * board stalls on the matching golem. Bosses reuse these archetypes as an
+ * overpowered, run-threatening version: full status immunity (burn/slow/stun),
+ * but only a heavy resist to physical/magic so a boss is never literally
+ * unkillable for a single-damage-type build. */
+const ENEMY_ARCHETYPES = [
+  { id: 'magma',   name: 'Magma',   immune: 'burn',     color: '#b5471f', accent: '#ff8a3a', glyph: '🌋' },
+  { id: 'glacier', name: 'Glacier', immune: 'slow',     color: '#3f7fb0', accent: '#bfeaff', glyph: '🧊' },
+  { id: 'steel',   name: 'Steel',   immune: 'physical', color: '#7c8696', accent: '#dde3ee', glyph: '🛡️' },
+  { id: 'void',    name: 'Void',    immune: 'magic',    color: '#5a3f93', accent: '#caa7ff', glyph: '🔮' },
+  { id: 'granite', name: 'Granite', immune: 'stun',     color: '#6c5a3e', accent: '#c8b48a', glyph: '🗿' },
+];
+
+function immuneLabel(im) {
+  return { burn: 'burn', slow: 'slow & freeze', physical: 'physical', magic: 'magic', stun: 'stun' }[im] || im;
+}
+function immuneBadge(im) {
+  return { burn: '🚫🔥', slow: '🚫❄', physical: '🚫⚔', magic: '🚫✨', stun: '🚫💫' }[im] || '';
+}
+
+/* Cosmetic skins so ordinary waves aren't one endlessly repeated sprite. */
+const MOB_SKINS = {
+  normal: [
+    { glyph: '🐛', color: '#e25555' },
+    { glyph: '🐜', color: '#c46a3a' },
+    { glyph: '🪲', color: '#5fae5f' },
+    { glyph: '🦗', color: '#8a9a3a' },
+    { glyph: '🐌', color: '#d08ab0' },
+  ],
+  elite: [
+    { glyph: '💧', color: '#7a55c4' },
+    { glyph: '👾', color: '#5a78c4' },
+    { glyph: '🦂', color: '#b0603a' },
+    { glyph: '🕷️', color: '#6a4aa0' },
+  ],
+};
+
 /* === Wave system === */
 function buildWave(n) {
   const queue = [];
@@ -557,9 +595,33 @@ function makeEnemy(kind, wave) {
     defDownTimer: 0, defDownAmount: 0,
     burnTimer: 0, burnDps: 0, burnSource: null, burnType: 'magic',
     freezeTimer: 0,
+    immune: null, archetype: null, accent: null,
+    runner: false, sturdy: false, slowResist: 0,
     dead: false, escaped: false,
     entryTimer: kind === 'boss' ? 0.9 : 0,
   };
+
+  if (kind === 'normal' || kind === 'elite') {
+    // Random skin for visual variety.
+    const skins = MOB_SKINS[kind];
+    const skin = skins[Math.floor(Math.random() * skins.length)];
+    e.color = skin.color; e.glyph = skin.glyph;
+    // Some mobs are runners — noticeably faster.
+    if (Math.random() < 0.22) { e.runner = true; e.baseSpeed *= 1.3; }
+    // A less-common few shrug off slows.
+    if (Math.random() < 0.12) { e.sturdy = true; e.slowResist = 0.65; }
+  } else if (kind === 'boss') {
+    // Bosses are an overpowered version of one mob archetype, cycling through
+    // all five over successive boss waves (W10 Magma, W20 Glacier, ...).
+    const arch = ENEMY_ARCHETYPES[(Math.floor(wave / 10) - 1 + ENEMY_ARCHETYPES.length * 100) % ENEMY_ARCHETYPES.length];
+    e.archetype = arch.id;
+    e.immune = arch.immune;
+    e.accent = arch.accent;
+    e.color = _darken(arch.color, 0.12);
+    e.glyph = arch.glyph;
+    e.bossName = arch.name;
+  }
+
   const p = positionAt(0);
   e.x = p.x; e.y = p.y;
   return e;
@@ -685,6 +747,17 @@ function damageEnemy(enemy, dmg, type, killer) {
   } else if (type === 'magic') {
     actual = dmg * (1 - enemy.magicRes);
   }
+  // Archetype damage immunity: golems negate their counter outright (you simply
+  // can't kill the wrong golem and it walks off); bosses take a heavy resist so
+  // a mandatory boss is never literally unkillable.
+  if (enemy.immune === type) {
+    if (enemy.kind === 'golem') {
+      if (Math.random() < 0.4) spawnPopup(enemy.x, enemy.y - enemy.size, 'IMMUNE', '#9aa3b2');
+      return;
+    }
+    actual *= 0.15;
+    if (Math.random() < 0.4) spawnPopup(enemy.x, enemy.y - enemy.size, 'RESIST', '#9aa3b2');
+  }
   enemy.hp -= actual;
   spawnPopup(enemy.x, enemy.y - enemy.size, Math.round(actual).toString(), type === 'magic' ? '#9bd9ff' : '#ffe5a3');
   if (enemy.hp <= 0 && !enemy.dead) {
@@ -766,6 +839,7 @@ function manaGainFor(u, c) {
 }
 
 function applyBurn(e, dps, duration, source, type) {
+  if (e.immune === 'burn') return;
   if (dps >= (e.burnDps || 0)) {
     e.burnDps = dps;
     e.burnSource = source;
@@ -775,9 +849,27 @@ function applyBurn(e, dps, duration, source, type) {
 }
 
 function applyFreeze(e, duration) {
+  if (e.immune === 'slow') return; // freeze is a hard slow — glacier archetype shrugs it off
   if (e.freezeTimer <= 0) noteStun();
   e.freezeTimer = Math.max(e.freezeTimer || 0, duration);
   spawnSlowFlakes(e.x, e.y - e.size);
+}
+
+/* Centralised slow/stun so archetype immunity and slow-resist apply everywhere. */
+function applySlow(e, amount, duration, flakes = true) {
+  if (e.immune === 'slow') return;
+  if (e.slowResist) amount *= (1 - e.slowResist);
+  const fresh = e.slowTimer <= 0;
+  e.slowAmount = Math.max(e.slowAmount, amount);
+  e.slowTimer  = Math.max(e.slowTimer, duration);
+  if (fresh && flakes) spawnSlowFlakes(e.x, e.y - e.size);
+}
+
+function applyStun(e, duration) {
+  if (e.immune === 'stun') return;
+  if (e.stunTimer <= 0) noteStun();
+  e.stunTimer = Math.max(e.stunTimer, duration);
+  spawnStunSparks(e.x, e.y - e.size);
 }
 
 function updateUnits(dt) {
@@ -818,15 +910,10 @@ function updateUnits(dt) {
     }
     if (d.stun && Math.random() < d.stun.chance) {
       const stunMult = (DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal).stunMult;
-      if (target.stunTimer <= 0) noteStun();
-      target.stunTimer = Math.max(target.stunTimer, d.stun.duration * stunMult);
-      spawnStunSparks(target.x, target.y - target.size);
+      applyStun(target, d.stun.duration * stunMult);
     }
     if (d.slow) {
-      const fresh = target.slowTimer <= 0;
-      target.slowAmount = Math.max(target.slowAmount, d.slow.amount);
-      target.slowTimer  = Math.max(target.slowTimer,  d.slow.duration);
-      if (fresh) spawnSlowFlakes(target.x, target.y - target.size);
+      applySlow(target, d.slow.amount, d.slow.duration);
     }
     if (d.freezeChance && Math.random() < d.freezeChance && !target.dead) {
       const stunMult = (DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal).stunMult;
@@ -1047,10 +1134,7 @@ function triggerSignature(u, target, c) {
         if (freeze) {
           applyFreeze(e, freezeDur * stunMult);
         } else {
-          const fresh = e.slowTimer <= 0;
-          e.slowAmount = Math.max(e.slowAmount, 0.70);
-          e.slowTimer  = Math.max(e.slowTimer, 1.2);
-          if (fresh) spawnSlowFlakes(e.x, e.y - e.size);
+          applySlow(e, 0.70, 1.2);
         }
       }
       log(`❄ ${d.name} unleashes Frost Nova!`, rarityCls);
@@ -1095,9 +1179,7 @@ function triggerSignature(u, target, c) {
       if (target && !target.dead) {
         damageEnemy(target, unitDamage(u) * 3.5 + target.maxHp * 0.04, 'physical', u);
         if (!target.dead) {
-          if (target.stunTimer <= 0) noteStun();
-          target.stunTimer = Math.max(target.stunTimer, 0.5 * stunMult);
-          spawnStunSparks(target.x, target.y - target.size);
+          applyStun(target, 0.5 * stunMult);
         }
         triggerShake(4, 0.2);
         spawnParticleBurst(target.x, target.y, '#ffd166', 16);
@@ -1364,28 +1446,35 @@ function sellSelected() {
 function spawnGolem() {
   if (game.golem.active || game.gameOver) return;
   const wave = game.wave;
-  const hp = 110 * Math.pow(1.08, wave - 1);
+  // Cycle archetypes by kill count so the player meets all five over a run.
+  const arch = ENEMY_ARCHETYPES[(game.golem.kills || 0) % ENEMY_ARCHETYPES.length];
+  // The stun-immune "tank" trades crowd-control immunity for a fatter HP pool.
+  const hp = 110 * Math.pow(1.08, wave - 1) * (arch.immune === 'stun' ? 1.6 : 1);
   const p = positionAt(0);
   game.enemies.push({
     kind: 'golem',
+    archetype: arch.id, immune: arch.immune, accent: arch.accent,
     maxHp: hp, hp,
     baseSpeed: 48,
-    size: 24,
+    size: 26,
     def: Math.floor(wave * 0.55),
     magicRes: 0,
-    color: '#6c5a3e',
-    glyph: '🗿',
+    color: arch.color,
+    glyph: arch.glyph,
     pathDist: 0, x: p.x, y: p.y,
     stunTimer: 0, slowTimer: 0, slowAmount: 0,
+    burnTimer: 0, burnDps: 0, burnSource: null, burnType: 'magic',
+    freezeTimer: 0,
+    runner: false, sturdy: false, slowResist: 0,
     defDownTimer: 0, defDownAmount: 0,
     dead: false, escaped: false,
     entryTimer: 0.6,
   });
   game.golem.active = true;
   triggerShake(7, 0.35);
-  spawnRing(p.x, p.y, 80, '#d2a76a', 0.6, 3);
-  spawnParticleBurst(p.x, p.y, '#d2a76a', 18);
-  log('A Golem lumbers onto the path!', 'epic');
+  spawnRing(p.x, p.y, 80, arch.accent, 0.6, 3);
+  spawnParticleBurst(p.x, p.y, arch.accent, 18);
+  log(`A ${arch.name} Golem lumbers onto the path! (immune to ${immuneLabel(arch.immune)})`, 'epic');
   updateUI();
 }
 
@@ -1723,6 +1812,10 @@ function _darken(hex, amt) {
   const n = parseInt(hex.slice(1), 16);
   let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   return `rgb(${Math.round(r * (1 - amt))},${Math.round(g * (1 - amt))},${Math.round(b * (1 - amt))})`;
+}
+function hexToRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 /* Vertical body gradient: lighter at the top, darker toward the feet. */
 function _vgrad(ctx, color, top, bottom) {
@@ -2525,38 +2618,71 @@ function drawEnemies(ctx) {
     const entryFrac = e.entryTimer > 0 ? (e.entryTimer / 0.9) : 0;
     const scale = 1 + entryFrac * 0.7;
     const sz = e.size * scale;
+    const big = e.kind === 'boss' || e.kind === 'golem';
 
     ctx.save();
     ctx.translate(e.x, e.y);
 
-    // Wobble animation
-    const wobble = Math.sin(t * 10 + e.pathDist * 0.1) * 0.1;
+    // Runner speed streaks trailing behind a moving mob.
+    if (e.runner && e.stunTimer <= 0 && e.freezeTimer <= 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        const yy = (i - 1) * sz * 0.4;
+        ctx.beginPath(); ctx.moveTo(-sz * 1.5, yy); ctx.lineTo(-sz * 0.8, yy); ctx.stroke();
+      }
+    }
+
+    // Wobble animation (bigger enemies wobble less).
+    const wobble = Math.sin(t * 10 + e.pathDist * 0.1) * (big ? 0.05 : 0.12);
     ctx.rotate(wobble);
 
     // shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
     ctx.beginPath();
     ctx.ellipse(0, sz - 2, sz * 0.8, 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Body
-    ctx.fillStyle = e.color;
-    ctx.beginPath();
-    ctx.arc(0, 0, sz, 0, Math.PI * 2);
-    ctx.fill();
+    // Archetype aura for golems/bosses — a soft glow, not the old flat disc.
+    if (e.immune && e.accent) {
+      const pulse = 0.5 + 0.5 * Math.sin(t * 3);
+      const g = ctx.createRadialGradient(0, 0, sz * 0.4, 0, 0, sz * 1.6);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(0.65, hexToRgba(e.accent, 0.06 + 0.16 * pulse));
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, sz * 1.6, 0, Math.PI * 2); ctx.fill();
+    }
 
-    // Shine
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.beginPath();
-    ctx.arc(-sz/3, -sz/3, sz/3, 0, Math.PI * 2);
-    ctx.fill();
+    // Sturdy (slow-resist) mobs wear a hint of armor plating.
+    if (e.sturdy) {
+      ctx.strokeStyle = 'rgba(205,214,232,0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, sz * 0.95, Math.PI * 0.12, Math.PI * 0.88); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, sz * 0.95, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke();
+    }
 
-    ctx.font = `${Math.round(sz * 1.2)}px ${EMOJI_FONT}`;
+    // Body is now the emoji itself — no flat circle behind it.
+    if (e.freezeTimer > 0) ctx.globalAlpha = 0.85;
+    ctx.font = `${Math.round(sz * (big ? 2.0 : 1.9))}px ${EMOJI_FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(e.glyph, 0, 1);
+    ctx.fillText(e.glyph, 0, big ? 1 : 0);
+    ctx.globalAlpha = 1;
 
     ctx.restore();
+
+    // Boss crown + archetype/immunity badge above big enemies.
+    if (e.kind === 'boss') {
+      ctx.font = `${Math.round(sz * 0.7)}px ${EMOJI_FONT}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('👑', e.x, e.y - sz - 14);
+    }
+    if (e.immune) {
+      ctx.font = `12px ${EMOJI_FONT}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(immuneBadge(e.immune), e.x, e.y - sz - (e.kind === 'boss' ? 30 : 16));
+    }
     // HP bar
     const w = sz * 2.2;
     const hp = Math.max(0, e.hp / e.maxHp);
