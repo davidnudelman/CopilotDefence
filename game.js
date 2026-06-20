@@ -2181,13 +2181,22 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
     ctx.globalAlpha = 1;
   }
 
-  // Draw stack count for Level 1 units
+  // Draw stack count for Level 1 units — large and outlined for visibility.
   if (d.rarity === 'Common' && (stackCount || 1) > 1) {
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${size/3}px sans-serif`;
+    const label = 'x' + stackCount;
+    const tx = size * 0.34, ty = size * 0.34;
+    ctx.font = `bold ${size * 0.6}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('x' + stackCount, size/3, size/3);
+    ctx.lineJoin = 'round';
+    ctx.shadowBlur = 4;
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.strokeStyle = '#11192b';
+    ctx.lineWidth = size * 0.12;
+    ctx.strokeText(label, tx, ty);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, tx, ty);
   }
 
   ctx.restore();
