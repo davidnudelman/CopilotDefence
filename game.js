@@ -1708,6 +1708,52 @@ function drawRangeIndicator(ctx, u) {
 
 const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
 
+/* === Sprite helpers ===
+ * Small utilities shared by the procedural unit renderer below. Colors passed
+ * to _lighten/_darken must be full 6-digit hex (e.g. the family colors). */
+function _lighten(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  r = Math.min(255, Math.round(r + (255 - r) * amt));
+  g = Math.min(255, Math.round(g + (255 - g) * amt));
+  b = Math.min(255, Math.round(b + (255 - b) * amt));
+  return `rgb(${r},${g},${b})`;
+}
+function _darken(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgb(${Math.round(r * (1 - amt))},${Math.round(g * (1 - amt))},${Math.round(b * (1 - amt))})`;
+}
+/* Vertical body gradient: lighter at the top, darker toward the feet. */
+function _vgrad(ctx, color, top, bottom) {
+  const g = ctx.createLinearGradient(0, top, 0, bottom);
+  g.addColorStop(0, _lighten(color, 0.35));
+  g.addColorStop(1, _darken(color, 0.18));
+  return g;
+}
+/* Filled star centered at (cx,cy). Caller sets fillStyle. */
+function _star(ctx, cx, cy, outer, inner, points, rot) {
+  ctx.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = rot + (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+    ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+/* Ring of glowing motes orbiting the unit (used by Immortal renders). */
+function _orbit(ctx, size, count, radius, dotR, color, t, speed) {
+  ctx.shadowBlur = 8; ctx.shadowColor = color; ctx.fillStyle = color;
+  for (let i = 0; i < count; i++) {
+    const a = t * speed + i * (Math.PI * 2 / count);
+    const ox = Math.cos(a) * radius;
+    const oy = Math.sin(a) * radius * 0.4 - size * 0.1;
+    ctx.beginPath(); ctx.arc(ox, oy, dotR, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+}
+
 function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
   const d = UNITS[unitId];
   const fam = FAMILIES[d.family];
@@ -1715,6 +1761,20 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
 
   ctx.save();
   ctx.translate(x, y);
+
+  // Immortals get a fully bespoke render and never fall through to the
+  // family ladder below — they should never read as a recolored Mythic.
+  if (rarity === 'Immortal') {
+    drawImmortal(ctx, d, size, t);
+    if (flash > 0) {
+      ctx.globalAlpha = (flash / 0.1) * 0.45;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(0, 0, size * 0.6, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    return;
+  }
 
   const scaleY = 1 + Math.sin(t * 8) * 0.05;
   const scaleX = 1 - Math.sin(t * 8) * 0.05;
@@ -1724,110 +1784,152 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
   const skinColor = '#ffdbac';
   const eyeColor  = '#1c2436';
   const eyeSize   = size / 12;
+  const OUTLINE   = '#11192b';
+  const bodyGrad  = _vgrad(ctx, bodyColor, -size * 0.6, size * 0.4);
+  const skinGrad  = _vgrad(ctx, '#ffe2bf', -size * 0.7, -size * 0.1);
+  ctx.lineJoin = 'round';
 
   if (d.family === 'frost') {
-    // --- Wizard (Humanoid with Robes and Pointed Hat) ---
-    // Robe (torso replacement)
-    ctx.fillStyle = bodyColor;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
+    // --- Wizard (robed mage with a pointed hat) ---
+    ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2.5;
+    // Robe (curved skirt)
+    ctx.fillStyle = bodyGrad;
     ctx.beginPath();
-    ctx.moveTo(-size * 0.35, size * 0.35);
-    ctx.lineTo(0, -size * 0.2);
-    ctx.lineTo(size * 0.35, size * 0.35);
+    ctx.moveTo(-size * 0.38, size * 0.38);
+    ctx.quadraticCurveTo(-size * 0.18, size * 0.05, 0, -size * 0.22);
+    ctx.quadraticCurveTo(size * 0.18, size * 0.05, size * 0.38, size * 0.38);
     ctx.closePath();
     ctx.fill(); ctx.stroke();
     // Head
-    ctx.fillStyle = skinColor;
+    ctx.fillStyle = skinGrad;
     ctx.beginPath(); ctx.arc(0, -size * 0.35, size * 0.25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     // Pointed Hat
-    ctx.fillStyle = bodyColor;
+    ctx.fillStyle = bodyGrad;
     ctx.beginPath();
-    ctx.moveTo(-size * 0.4, -size * 0.45);
-    ctx.lineTo(0, -size * 0.85);
-    ctx.lineTo(size * 0.4, -size * 0.45);
+    ctx.moveTo(-size * 0.42, -size * 0.44);
+    ctx.quadraticCurveTo(-size * 0.1, -size * 0.5, 0, -size * 0.88);
+    ctx.quadraticCurveTo(size * 0.1, -size * 0.5, size * 0.42, -size * 0.44);
     ctx.closePath();
     ctx.fill(); ctx.stroke();
-    // Eyes
+    // Hat brim
+    ctx.fillStyle = _lighten(bodyColor, 0.18);
+    ctx.beginPath(); ctx.ellipse(0, -size * 0.44, size * 0.42, size * 0.08, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Eyes + shine
     ctx.fillStyle = eyeColor;
     ctx.beginPath(); ctx.arc(-size * 0.08, -size * 0.35, eyeSize, 0, Math.PI * 2); ctx.arc(size * 0.08, -size * 0.35, eyeSize, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-size * 0.06, -size * 0.37, eyeSize * 0.35, 0, Math.PI * 2); ctx.arc(size * 0.1, -size * 0.37, eyeSize * 0.35, 0, Math.PI * 2); ctx.fill();
   } else if (d.family === 'burn') {
-    // --- Robot (Boxy bodies and antennas) ---
-    ctx.fillStyle = '#777';
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
+    // --- Robot (boxy chassis with a glowing visor) ---
+    const metal = _vgrad(ctx, '#8a8f99', -size * 0.55, size * 0.3);
+    ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2.5; ctx.fillStyle = metal;
     // Boxy body
-    ctx.beginPath(); ctx.rect(-size * 0.35, -size * 0.2, size * 0.7, size * 0.5); ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(-size * 0.35, -size * 0.2, size * 0.7, size * 0.5, size * 0.08);
+    else ctx.rect(-size * 0.35, -size * 0.2, size * 0.7, size * 0.5);
+    ctx.fill(); ctx.stroke();
+    // Chest panel
+    ctx.fillStyle = _darken('#8a8f99', 0.28);
+    ctx.fillRect(-size * 0.18, -size * 0.08, size * 0.36, size * 0.2);
     // Boxy head
-    ctx.beginPath(); ctx.rect(-size * 0.25, -size * 0.55, size * 0.5, size * 0.3); ctx.fill(); ctx.stroke();
-    // Antenna
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.fillStyle = metal;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(-size * 0.25, -size * 0.55, size * 0.5, size * 0.3, size * 0.06);
+    else ctx.rect(-size * 0.25, -size * 0.55, size * 0.5, size * 0.3);
+    ctx.fill(); ctx.stroke();
+    // Antenna with blinking tip
+    ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(0, -size * 0.55); ctx.lineTo(0, -size * 0.75); ctx.stroke();
-    ctx.fillStyle = bodyColor; ctx.beginPath(); ctx.arc(0, -size * 0.75, 4, 0, Math.PI * 2); ctx.fill();
-    // Glowing Visor
-    ctx.fillStyle = '#0ff';
-    ctx.fillRect(-size * 0.18, -size * 0.48, size * 0.36, size * 0.08);
+    const blink = 0.5 + 0.5 * Math.sin(t * 6);
+    ctx.fillStyle = bodyColor; ctx.shadowBlur = 6 * blink; ctx.shadowColor = bodyColor;
+    ctx.beginPath(); ctx.arc(0, -size * 0.78, 4, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+    // Glowing visor
+    ctx.fillStyle = '#26e0ff'; ctx.shadowBlur = 8; ctx.shadowColor = '#26e0ff';
+    ctx.fillRect(-size * 0.18, -size * 0.48, size * 0.36, size * 0.09); ctx.shadowBlur = 0;
   } else if (d.family === 'sniper') {
-    // --- Archer (Humanoid with Hood and Cape) ---
-    ctx.fillStyle = bodyColor;
+    // --- Archer (hooded ranger with a cape) ---
+    ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2.5;
     // Cape
-    ctx.beginPath(); ctx.moveTo(-size * 0.4, -size * 0.2); ctx.lineTo(-size * 0.5, size * 0.4); ctx.lineTo(size * 0.5, size * 0.4); ctx.lineTo(size * 0.4, -size * 0.2); ctx.fill();
+    ctx.fillStyle = _darken(bodyColor, 0.12);
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.4, -size * 0.2); ctx.lineTo(-size * 0.5, size * 0.4);
+    ctx.quadraticCurveTo(0, size * 0.5, size * 0.5, size * 0.4); ctx.lineTo(size * 0.4, -size * 0.2);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
     // Torso
-    ctx.fillStyle = '#444'; ctx.beginPath(); ctx.rect(-size * 0.25, -size * 0.2, size * 0.5, size * 0.5); ctx.fill();
+    ctx.fillStyle = _vgrad(ctx, '#3b4250', -size * 0.2, size * 0.3);
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(-size * 0.25, -size * 0.2, size * 0.5, size * 0.5, size * 0.1);
+    else ctx.rect(-size * 0.25, -size * 0.2, size * 0.5, size * 0.5);
+    ctx.fill(); ctx.stroke();
     // Head
-    ctx.fillStyle = skinColor; ctx.beginPath(); ctx.arc(0, -size * 0.4, size * 0.25, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = skinGrad; ctx.beginPath(); ctx.arc(0, -size * 0.4, size * 0.25, 0, Math.PI * 2); ctx.fill();
     // Hood
-    ctx.fillStyle = bodyColor;
+    ctx.fillStyle = bodyGrad;
     ctx.beginPath(); ctx.arc(0, -size * 0.42, size * 0.28, Math.PI, 0, true);
-    ctx.lineTo(size * 0.28, -size * 0.2); ctx.lineTo(-size * 0.28, -size * 0.2); ctx.closePath(); ctx.fill();
-    // Eyes
-    ctx.fillStyle = eyeColor; ctx.beginPath(); ctx.arc(-size * 0.08, -size * 0.4, eyeSize, 0, Math.PI * 2); ctx.arc(size * 0.08, -size * 0.4, eyeSize, 0, Math.PI * 2); ctx.fill();
+    ctx.lineTo(size * 0.28, -size * 0.2); ctx.lineTo(-size * 0.28, -size * 0.2); ctx.closePath(); ctx.fill(); ctx.stroke();
+    // Glowing eyes under the hood
+    ctx.fillStyle = '#d6ecff'; ctx.shadowBlur = 4; ctx.shadowColor = '#bfe0ff';
+    ctx.beginPath(); ctx.arc(-size * 0.08, -size * 0.4, eyeSize, 0, Math.PI * 2); ctx.arc(size * 0.08, -size * 0.4, eyeSize, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
   } else if (d.family === 'bruiser') {
-    // --- Animal (Bulky shapes, ears) ---
-    ctx.fillStyle = bodyColor;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
+    // --- Beast (bulky body, ears, snout) ---
+    ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2.5; ctx.fillStyle = bodyGrad;
     // Bulky body
     ctx.beginPath(); ctx.ellipse(0, 0, size * 0.45, size * 0.35, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Belly
+    ctx.fillStyle = _lighten(bodyColor, 0.28);
+    ctx.beginPath(); ctx.ellipse(0, size * 0.05, size * 0.28, size * 0.22, 0, 0, Math.PI * 2); ctx.fill();
     // Bulky head
+    ctx.fillStyle = bodyGrad;
     ctx.beginPath(); ctx.arc(0, -size * 0.35, size * 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     // Ears
     ctx.beginPath();
-    ctx.moveTo(-size * 0.25, -size * 0.55); ctx.lineTo(-size * 0.15, -size * 0.75); ctx.lineTo(-size * 0.05, -size * 0.55);
-    ctx.moveTo(size * 0.25, -size * 0.55); ctx.lineTo(size * 0.15, -size * 0.75); ctx.lineTo(size * 0.05, -size * 0.55);
-    ctx.fill(); ctx.stroke();
-    // Eyes
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-size * 0.1, -size * 0.35, eyeSize * 1.5, 0, Math.PI * 2); ctx.arc(size * 0.1, -size * 0.35, eyeSize * 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.moveTo(-size * 0.25, -size * 0.55); ctx.lineTo(-size * 0.15, -size * 0.78); ctx.lineTo(-size * 0.03, -size * 0.55);
+    ctx.moveTo(size * 0.25, -size * 0.55); ctx.lineTo(size * 0.15, -size * 0.78); ctx.lineTo(size * 0.03, -size * 0.55);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // Snout + nose
+    ctx.fillStyle = _lighten(bodyColor, 0.2);
+    ctx.beginPath(); ctx.ellipse(0, -size * 0.25, size * 0.12, size * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = OUTLINE;
+    ctx.beginPath(); ctx.ellipse(0, -size * 0.27, size * 0.045, size * 0.03, 0, 0, Math.PI * 2); ctx.fill();
+    // Eyes with pupils
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(-size * 0.12, -size * 0.4, eyeSize * 1.5, 0, Math.PI * 2); ctx.arc(size * 0.12, -size * 0.4, eyeSize * 1.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = eyeColor;
+    ctx.beginPath(); ctx.arc(-size * 0.1, -size * 0.39, eyeSize * 0.7, 0, Math.PI * 2); ctx.arc(size * 0.14, -size * 0.39, eyeSize * 0.7, 0, Math.PI * 2); ctx.fill();
   } else if (d.family === 'arcane') {
-    // --- Bird (Avian features, wings) ---
-    ctx.fillStyle = bodyColor;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
+    // --- Bird (avian body with flapping wings) ---
+    ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2.5; ctx.fillStyle = bodyGrad;
     // Body (egg shape)
     ctx.beginPath(); ctx.ellipse(0, 0, size * 0.35, size * 0.45, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    // Wings
-    ctx.beginPath(); ctx.ellipse(-size * 0.4, -size * 0.05, size * 0.2, size * 0.3, Math.PI / 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(size * 0.4, -size * 0.05, size * 0.2, size * 0.3, -Math.PI / 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Wings (gentle flap)
+    const flap = Math.sin(t * 6) * 0.15;
+    ctx.beginPath(); ctx.ellipse(-size * 0.4, -size * 0.05, size * 0.2, size * 0.32, Math.PI / 4 + flap, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(size * 0.4, -size * 0.05, size * 0.2, size * 0.32, -Math.PI / 4 - flap, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Belly
+    ctx.fillStyle = _lighten(bodyColor, 0.3);
+    ctx.beginPath(); ctx.ellipse(0, size * 0.08, size * 0.2, size * 0.28, 0, 0, Math.PI * 2); ctx.fill();
     // Head
+    ctx.fillStyle = bodyGrad;
     ctx.beginPath(); ctx.arc(0, -size * 0.4, size * 0.25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     // Beak
     ctx.fillStyle = '#ff8a3a';
-    ctx.beginPath(); ctx.moveTo(0, -size * 0.35); ctx.lineTo(size * 0.2, -size * 0.3); ctx.lineTo(0, -size * 0.25); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, -size * 0.34); ctx.lineTo(size * 0.22, -size * 0.3); ctx.lineTo(0, -size * 0.24); ctx.closePath(); ctx.fill(); ctx.stroke();
+    // Eye
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-size * 0.06, -size * 0.43, eyeSize * 1.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = eyeColor; ctx.beginPath(); ctx.arc(-size * 0.05, -size * 0.43, eyeSize * 0.6, 0, Math.PI * 2); ctx.fill();
   } else {
     // --- Base Humanoid ---
     // Arms (drawn behind torso)
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = size * 0.12;
+    ctx.strokeStyle = skinColor;
+    ctx.lineWidth = size * 0.1;
     ctx.lineCap = 'round';
-    // Left arm
     ctx.beginPath(); ctx.moveTo(-size * 0.25, -size * 0.1); ctx.lineTo(-size * 0.45, size * 0.15); ctx.stroke();
-    // Right arm
     ctx.beginPath(); ctx.moveTo(size * 0.25, -size * 0.1); ctx.lineTo(size * 0.45, size * 0.15); ctx.stroke();
 
     // Torso
-    ctx.fillStyle = bodyColor;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
+    ctx.fillStyle = bodyGrad;
+    ctx.strokeStyle = OUTLINE;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     if (ctx.roundRect) {
       ctx.roundRect(-size * 0.3, -size * 0.2, size * 0.6, size * 0.55, size * 0.15);
@@ -1838,23 +1940,28 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
     ctx.stroke();
 
     // Head
-    ctx.fillStyle = skinColor;
+    ctx.fillStyle = skinGrad;
     ctx.beginPath();
     ctx.arc(0, -size * 0.45, size * 0.28, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
     // Hair/Hat (family-colored base)
-    ctx.fillStyle = bodyColor;
+    ctx.fillStyle = bodyGrad;
     ctx.beginPath();
     ctx.arc(0, -size * 0.45, size * 0.28, Math.PI, 0);
     ctx.fill();
 
-    // Eyes
+    // Eyes + shine
     ctx.fillStyle = eyeColor;
     ctx.beginPath();
     ctx.arc(-size * 0.1, -size * 0.45, eyeSize, 0, Math.PI * 2);
     ctx.arc(size * 0.1, -size * 0.45, eyeSize, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(-size * 0.08, -size * 0.47, eyeSize * 0.35, 0, Math.PI * 2);
+    ctx.arc(size * 0.12, -size * 0.47, eyeSize * 0.35, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -1975,9 +2082,10 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
   }
 
   if (flash > 0) {
-    ctx.fillStyle = '#fff';
     ctx.globalAlpha = (flash / 0.1) * 0.4;
-    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(0, -size * 0.1, size * 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
   }
 
   // Draw stack count for Level 1 units
@@ -1990,6 +2098,221 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
   }
 
   ctx.restore();
+}
+
+/* === Immortal renders ===
+ * Each Immortal is a one-off, hand-built sprite with its own palette, aura and
+ * motion so it never reads as a recolored member of its family. They float,
+ * carry a radial glow and orbiting motes, and lean into a distinct theme:
+ * Haley (gilded celestial champion), Ato (astral cosmic seraph), Archangel
+ * (radiant winged divinity) and Vulcan (obsidian volcanic titan). */
+function drawImmortal(ctx, d, size, t) {
+  ctx.translate(0, Math.sin(t * 2) * size * 0.05); // gentle hover
+  if (d.id === 'haley')      drawImmortalHaley(ctx, size, t);
+  else if (d.id === 'ato')   drawImmortalAto(ctx, size, t);
+  else if (d.id === 'angel') drawArchangel(ctx, size, t);
+  else if (d.id === 'vulcan') drawVulcan(ctx, size, t);
+}
+
+function drawImmortalHaley(ctx, size, t) {
+  const pulse = 0.5 + 0.5 * Math.sin(t * 2);
+  // Gilded backdrop glow
+  let g = ctx.createRadialGradient(0, -size * 0.1, size * 0.1, 0, -size * 0.1, size);
+  g.addColorStop(0, `rgba(255,225,140,${0.35 + 0.15 * pulse})`);
+  g.addColorStop(0.5, 'rgba(255,190,70,0.12)');
+  g.addColorStop(1, 'rgba(255,190,70,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, -size * 0.1, size, 0, Math.PI * 2); ctx.fill();
+  // Flowing energy cape
+  ctx.fillStyle = 'rgba(255,170,40,0.55)';
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.3, -size * 0.25); ctx.lineTo(size * 0.3, -size * 0.25);
+  for (let i = 0; i <= 6; i++) {
+    ctx.lineTo(size * 0.3 - (i / 6) * size * 0.6, size * 0.45 + Math.sin(t * 4 + i) * size * 0.06);
+  }
+  ctx.closePath(); ctx.fill();
+  // Armored torso
+  const body = ctx.createLinearGradient(0, -size * 0.3, 0, size * 0.35);
+  body.addColorStop(0, '#fff3c4'); body.addColorStop(0.5, '#ffcf4d'); body.addColorStop(1, '#c8902a');
+  ctx.fillStyle = body; ctx.strokeStyle = '#7a5212'; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-size * 0.3, -size * 0.2, size * 0.6, size * 0.5, size * 0.12);
+  else ctx.rect(-size * 0.3, -size * 0.2, size * 0.6, size * 0.5);
+  ctx.fill(); ctx.stroke();
+  // Chest star emblem
+  ctx.fillStyle = '#fff'; ctx.shadowBlur = 10; ctx.shadowColor = '#aef6ff';
+  _star(ctx, 0, size * 0.02, size * 0.13, size * 0.06, 5, t * 0.5);
+  ctx.shadowBlur = 0;
+  // Glowing gauntlet fists
+  ctx.fillStyle = '#ffe07a'; ctx.strokeStyle = '#7a5212'; ctx.lineWidth = 2;
+  for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(sx * size * 0.42, size * 0.12, size * 0.1, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+  // Helmeted head
+  const hg = ctx.createLinearGradient(0, -size * 0.6, 0, -size * 0.3);
+  hg.addColorStop(0, '#fff3c4'); hg.addColorStop(1, '#d9a93a');
+  ctx.fillStyle = hg; ctx.strokeStyle = '#7a5212'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(0, -size * 0.42, size * 0.26, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // Visor / glowing eyes
+  ctx.fillStyle = '#9af3ff'; ctx.shadowBlur = 8; ctx.shadowColor = '#9af3ff';
+  ctx.fillRect(-size * 0.14, -size * 0.46, size * 0.28, size * 0.07); ctx.shadowBlur = 0;
+  // Helmet wings
+  ctx.fillStyle = '#fff';
+  for (const sx of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(sx * size * 0.24, -size * 0.5); ctx.lineTo(sx * size * 0.46, -size * 0.62); ctx.lineTo(sx * size * 0.24, -size * 0.4);
+    ctx.closePath(); ctx.fill();
+  }
+  // Halo
+  ctx.strokeStyle = `rgba(255,236,150,${0.6 + 0.4 * pulse})`; ctx.lineWidth = 3; ctx.shadowBlur = 10; ctx.shadowColor = '#ffe28a';
+  ctx.beginPath(); ctx.ellipse(0, -size * 0.72, size * 0.22, size * 0.07, 0, 0, Math.PI * 2); ctx.stroke(); ctx.shadowBlur = 0;
+  _orbit(ctx, size, 4, size * 0.55, size * 0.05, '#ffe9a8', t, 1.6);
+}
+
+function drawImmortalAto(ctx, size, t) {
+  const pulse = 0.5 + 0.5 * Math.sin(t * 1.5);
+  // Cosmic backdrop glow
+  let g = ctx.createRadialGradient(0, -size * 0.1, size * 0.1, 0, -size * 0.1, size * 1.05);
+  g.addColorStop(0, `rgba(180,150,255,${0.4 + 0.15 * pulse})`);
+  g.addColorStop(0.5, 'rgba(90,120,255,0.14)');
+  g.addColorStop(1, 'rgba(60,90,200,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, -size * 0.1, size * 1.05, 0, Math.PI * 2); ctx.fill();
+  // Starlight butterfly wings
+  const flap = Math.sin(t * 3) * 0.12;
+  const wg = ctx.createLinearGradient(-size * 0.6, 0, size * 0.6, 0);
+  wg.addColorStop(0, 'rgba(120,200,255,0.75)');
+  wg.addColorStop(0.5, 'rgba(190,150,255,0.6)');
+  wg.addColorStop(1, 'rgba(120,200,255,0.75)');
+  ctx.fillStyle = wg; ctx.strokeStyle = 'rgba(220,235,255,0.8)'; ctx.lineWidth = 1.5;
+  for (const sx of [-1, 1]) {
+    ctx.save(); ctx.scale(sx, 1);
+    ctx.beginPath(); ctx.ellipse(size * (0.34 + flap), -size * 0.18, size * 0.26, size * 0.2, -0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(size * (0.3 + flap), size * 0.2, size * 0.2, size * 0.16, 0.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  // Wing stars
+  ctx.fillStyle = '#fff';
+  for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(sx * size * (0.3 + 0.06 * i), -size * 0.25 + size * 0.16 * i, 1.6, 0, Math.PI * 2); ctx.fill(); }
+  // Deep-space robe
+  const body = ctx.createLinearGradient(0, -size * 0.3, 0, size * 0.4);
+  body.addColorStop(0, '#3a2d70'); body.addColorStop(1, '#140d33');
+  ctx.fillStyle = body; ctx.strokeStyle = 'rgba(180,160,255,0.7)'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.22, -size * 0.2); ctx.lineTo(size * 0.22, -size * 0.2); ctx.lineTo(size * 0.3, size * 0.4); ctx.lineTo(-size * 0.3, size * 0.4);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // Robe stars
+  ctx.fillStyle = '#cfe0ff';
+  for (let i = 0; i < 6; i++) { const a = i * 1.3; ctx.beginPath(); ctx.arc(Math.cos(a) * size * 0.12, size * 0.05 + Math.sin(a) * size * 0.18, 1.3, 0, Math.PI * 2); ctx.fill(); }
+  // Head
+  const hg = ctx.createRadialGradient(0, -size * 0.42, 2, 0, -size * 0.42, size * 0.25);
+  hg.addColorStop(0, '#efe7ff'); hg.addColorStop(1, '#b9a6e8');
+  ctx.fillStyle = hg; ctx.strokeStyle = 'rgba(180,160,255,0.7)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, -size * 0.42, size * 0.22, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // Glowing eyes
+  ctx.fillStyle = '#7ad7ff'; ctx.shadowBlur = 8; ctx.shadowColor = '#7ad7ff';
+  ctx.beginPath(); ctx.arc(-size * 0.07, -size * 0.42, size * 0.04, 0, Math.PI * 2); ctx.arc(size * 0.07, -size * 0.42, size * 0.04, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+  // Starlight crown
+  ctx.fillStyle = '#dff0ff'; ctx.shadowBlur = 6; ctx.shadowColor = '#bcd8ff';
+  for (let i = -2; i <= 2; i++) {
+    const cx = i * size * 0.08, h = size * (0.12 - Math.abs(i) * 0.02);
+    ctx.beginPath(); ctx.moveTo(cx - size * 0.025, -size * 0.6); ctx.lineTo(cx, -size * 0.6 - h); ctx.lineTo(cx + size * 0.025, -size * 0.6); ctx.closePath(); ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+  // Orbiting constellation
+  ctx.shadowBlur = 8; ctx.shadowColor = '#bcd8ff'; ctx.fillStyle = '#fff';
+  for (let i = 0; i < 5; i++) {
+    const a = t * 1.2 + i * (Math.PI * 2 / 5);
+    _star(ctx, Math.cos(a) * size * 0.6, Math.sin(a) * size * 0.3 - size * 0.1, 3.5, 1.6, 4, a);
+  }
+  ctx.shadowBlur = 0;
+}
+
+function drawArchangel(ctx, size, t) {
+  const pulse = 0.5 + 0.5 * Math.sin(t * 2);
+  const flap = Math.sin(t * 4) * 0.18;
+  // Radiant backdrop
+  let g = ctx.createRadialGradient(0, -size * 0.15, size * 0.1, 0, -size * 0.15, size);
+  g.addColorStop(0, `rgba(255,255,235,${0.45 + 0.15 * pulse})`);
+  g.addColorStop(0.5, 'rgba(255,240,180,0.12)');
+  g.addColorStop(1, 'rgba(255,240,180,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, -size * 0.15, size, 0, Math.PI * 2); ctx.fill();
+  // Layered feathered wings
+  ctx.strokeStyle = '#d8dcea'; ctx.lineWidth = 1.5;
+  for (const sx of [-1, 1]) {
+    ctx.save(); ctx.scale(sx, 1); ctx.rotate(-flap);
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i % 2 ? '#ffffff' : '#eef2ff';
+      ctx.beginPath();
+      ctx.ellipse(size * 0.3, -size * 0.25 + i * size * 0.13, size * (0.3 - i * 0.04), size * 0.09, -0.5, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // Robe body
+  const body = ctx.createLinearGradient(0, -size * 0.25, 0, size * 0.4);
+  body.addColorStop(0, '#ffffff'); body.addColorStop(1, '#dfe6ff');
+  ctx.fillStyle = body; ctx.strokeStyle = '#c9b15a'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.2, -size * 0.2); ctx.lineTo(size * 0.2, -size * 0.2); ctx.lineTo(size * 0.32, size * 0.4); ctx.lineTo(-size * 0.32, size * 0.4);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // Gold sash
+  ctx.strokeStyle = '#f4d35e'; ctx.lineWidth = size * 0.06; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-size * 0.18, -size * 0.15); ctx.lineTo(size * 0.2, size * 0.2); ctx.stroke();
+  // Head
+  ctx.fillStyle = '#ffe9cf'; ctx.strokeStyle = '#c9b15a'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, -size * 0.4, size * 0.22, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // Serene eyes
+  ctx.fillStyle = '#6a82c0';
+  ctx.beginPath(); ctx.arc(-size * 0.07, -size * 0.4, size * 0.03, 0, Math.PI * 2); ctx.arc(size * 0.07, -size * 0.4, size * 0.03, 0, Math.PI * 2); ctx.fill();
+  // Halo
+  ctx.strokeStyle = `rgba(255,220,120,${0.7 + 0.3 * pulse})`; ctx.lineWidth = 3.5; ctx.shadowBlur = 12; ctx.shadowColor = '#ffd86a';
+  ctx.beginPath(); ctx.ellipse(0, -size * 0.66, size * 0.2, size * 0.07, 0, 0, Math.PI * 2); ctx.stroke(); ctx.shadowBlur = 0;
+  _orbit(ctx, size, 5, size * 0.5, size * 0.045, '#fff6d0', t, 1.4);
+}
+
+function drawVulcan(ctx, size, t) {
+  const flick = 0.5 + 0.5 * Math.sin(t * 9) * Math.sin(t * 5);
+  // Fiery backdrop
+  let g = ctx.createRadialGradient(0, 0, size * 0.1, 0, 0, size * 1.05);
+  g.addColorStop(0, `rgba(255,140,40,${0.4 + 0.2 * flick})`);
+  g.addColorStop(0.5, 'rgba(220,60,20,0.16)');
+  g.addColorStop(1, 'rgba(180,40,10,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, size * 1.05, 0, Math.PI * 2); ctx.fill();
+  // Obsidian body
+  const body = ctx.createLinearGradient(0, -size * 0.4, 0, size * 0.4);
+  body.addColorStop(0, '#3a3340'); body.addColorStop(1, '#15100f');
+  ctx.fillStyle = body; ctx.strokeStyle = '#0a0708'; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-size * 0.35, -size * 0.25, size * 0.7, size * 0.6, size * 0.1);
+  else ctx.rect(-size * 0.35, -size * 0.25, size * 0.7, size * 0.6);
+  ctx.fill(); ctx.stroke();
+  // Magma cracks
+  ctx.strokeStyle = `rgba(255,${90 + (120 * flick | 0)},20,${0.7 + 0.3 * flick})`; ctx.lineWidth = 2.5; ctx.shadowBlur = 8; ctx.shadowColor = '#ff5a1e';
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.25, -size * 0.2); ctx.lineTo(-size * 0.08, 0); ctx.lineTo(-size * 0.18, size * 0.18);
+  ctx.moveTo(size * 0.05, -size * 0.22); ctx.lineTo(size * 0.18, size * 0.02); ctx.lineTo(size * 0.08, size * 0.25);
+  ctx.stroke(); ctx.shadowBlur = 0;
+  // Molten core
+  ctx.fillStyle = `rgba(255,${120 + (100 * flick | 0)},40,${0.6 + 0.4 * flick})`; ctx.shadowBlur = 12; ctx.shadowColor = '#ff7a2a';
+  ctx.beginPath(); ctx.arc(0, size * 0.02, size * 0.1 * (0.9 + 0.2 * flick), 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+  // Head
+  ctx.fillStyle = body; ctx.strokeStyle = '#0a0708'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(0, -size * 0.42, size * 0.24, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // Glowing eyes
+  ctx.fillStyle = '#ffd23a'; ctx.shadowBlur = 8; ctx.shadowColor = '#ffae1e';
+  ctx.beginPath(); ctx.arc(-size * 0.08, -size * 0.42, size * 0.035, 0, Math.PI * 2); ctx.arc(size * 0.08, -size * 0.42, size * 0.035, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+  // Molten horns
+  ctx.fillStyle = 'rgba(255,110,30,0.85)'; ctx.strokeStyle = '#0a0708'; ctx.lineWidth = 1.5;
+  for (const sx of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(sx * size * 0.1, -size * 0.6); ctx.lineTo(sx * size * 0.26, -size * 0.82); ctx.lineTo(sx * size * 0.2, -size * 0.56);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  // Rising embers
+  ctx.shadowBlur = 6; ctx.shadowColor = '#ff8a3a'; ctx.fillStyle = '#ff8a3a';
+  for (let i = 0; i < 5; i++) {
+    const phase = (t * 0.6 + i * 0.2) % 1;
+    ctx.globalAlpha = 1 - phase;
+    ctx.beginPath(); ctx.arc(Math.sin(i * 2.1 + t) * size * 0.4, size * 0.3 - phase * size * 0.9, 2, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
 }
 
 function drawUnitAt(ctx, u, x, y, ghost = false) {
