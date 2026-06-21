@@ -2912,6 +2912,17 @@ function drawEnemies(ctx) {
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(0, 0, sz * 1.6, 0, Math.PI * 2); ctx.fill();
+
+      // Solid body disc + pulsing shield ring. Without an opaque backing the
+      // bare emoji read as see-through against the path; protected mobs now
+      // sit on a solid orb so they always look solid and clearly shielded.
+      ctx.fillStyle = 'rgba(22,20,26,0.92)';
+      ctx.beginPath(); ctx.arc(0, 0, sz * 0.95, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = e.accent;
+      ctx.lineWidth = 2.5;
+      ctx.globalAlpha = 0.7 + 0.3 * pulse;
+      ctx.beginPath(); ctx.arc(0, 0, sz * 0.95, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     // Sturdy (slow-resist) mobs wear a hint of armor plating.
