@@ -1846,6 +1846,35 @@ function _orbit(ctx, size, count, radius, dotR, color, t, speed) {
   }
   ctx.shadowBlur = 0;
 }
+/* Diamond / ice-shard path centered at (cx,cy). Leaves the path open so the
+ * caller can fill() and/or stroke() it. */
+function _diamond(ctx, cx, cy, hw, hh) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - hh);
+  ctx.lineTo(cx + hw, cy);
+  ctx.lineTo(cx, cy + hh);
+  ctx.lineTo(cx - hw, cy);
+  ctx.closePath();
+}
+/* Flickering flame teardrop centered at (x,y). Self-contained: saves/restores
+ * its own state, so it never leaks shadow/fill onto the caller. */
+function _flame(ctx, x, y, r, t) {
+  const f = 0.85 + 0.3 * Math.sin(t * 12 + x);
+  ctx.save();
+  ctx.fillStyle = '#ff8a2a'; ctx.shadowBlur = 8; ctx.shadowColor = '#ff5a1a';
+  ctx.beginPath();
+  ctx.moveTo(x, y - r * 1.7 * f);
+  ctx.quadraticCurveTo(x + r, y - r * 0.2, x, y + r);
+  ctx.quadraticCurveTo(x - r, y - r * 0.2, x, y - r * 1.7 * f);
+  ctx.fill();
+  ctx.fillStyle = '#ffe14a'; ctx.shadowBlur = 0;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r * 0.95 * f);
+  ctx.quadraticCurveTo(x + r * 0.5, y - r * 0.1, x, y + r * 0.5);
+  ctx.quadraticCurveTo(x - r * 0.5, y - r * 0.1, x, y - r * 0.95 * f);
+  ctx.fill();
+  ctx.restore();
+}
 
 function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
   const d = UNITS[unitId];
@@ -1872,6 +1901,11 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
   const scaleY = 1 + Math.sin(t * 8) * 0.05;
   const scaleX = 1 - Math.sin(t * 8) * 0.05;
   ctx.scale(scaleX, scaleY);
+
+  // Per-tier "level colour" + index, so each rung of a family ladder can carry
+  // a distinct accent and escalating gear (Common→Rare→Epic→Legendary→Mythic).
+  const tier = { Common: 0, Rare: 1, Epic: 2, Legendary: 3, Mythic: 4 }[rarity] || 0;
+  const accent = RARITY_COLORS[rarity] || '#ffffff';
 
   const bodyColor = fam.color;
   const skinColor = '#ffdbac';
@@ -2058,119 +2092,266 @@ function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
     ctx.fill();
   }
 
-  // Family-specific Equipment
+  // Rarity gem — every guardian wears its "level colour" on its body, so two
+  // rungs of the same family never read as the same sprite. The robot family
+  // gets a glowing chest core instead of a faceted gem.
+  ctx.lineJoin = 'round';
+  if (d.family === 'burn') {
+    ctx.fillStyle = accent; ctx.shadowBlur = 6; ctx.shadowColor = accent;
+    ctx.beginPath(); ctx.arc(0, size * 0.02, size * (0.05 + tier * 0.01), 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  } else {
+    const gemR = size * (0.06 + tier * 0.012);
+    ctx.fillStyle = accent; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+    ctx.shadowBlur = tier >= 3 ? 6 : 0; ctx.shadowColor = accent;
+    _diamond(ctx, 0, size * 0.04, gemR, gemR * 1.4); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // === Family + tier specific gear — each rung gets a unique silhouette ===
   if (d.family === 'frost') {
-    if (d.id === 'frost_c' || d.id === 'frost_r') { // Ice tosser/Engineer
-      ctx.fillStyle = '#add8e6';
-      ctx.fillRect(size * 0.35, -size * 0.1, size * 0.25, size * 0.25); // Ice block in hand
-    } else if (d.id === 'frost_e' || d.id === 'frost_l') { // Cryomancer/Glacier Sage
-      ctx.strokeStyle = '#8b4513'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(size * 0.4, size * 0.2); ctx.lineTo(size * 0.4, -size * 0.5); ctx.stroke(); // Staff
-      ctx.fillStyle = '#add8e6';
-      ctx.beginPath(); ctx.arc(size * 0.4, -size * 0.5, size * 0.12, 0, Math.PI * 2); ctx.fill(); // Crystal
-    } else if (d.id === 'frost_m') { // Blizzard King
-      ctx.fillStyle = '#ff0';
-      ctx.beginPath(); // Crown
+    if (d.id === 'frost_c') {
+      // Ice Tosser — lobs a bare snowball, no headgear
+      ctx.fillStyle = '#e8f6ff'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(size * 0.44, -size * 0.08, size * 0.11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.beginPath(); ctx.arc(size * 0.41, -size * 0.11, size * 0.035, 0, Math.PI * 2); ctx.fill();
+    } else if (d.id === 'frost_r') {
+      // Frost Engineer — hard hat, wrench, and an ice cube
+      ctx.fillStyle = '#ffd23f'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, -size * 0.58, size * 0.2, Math.PI, 0); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-size * 0.22, -size * 0.58); ctx.lineTo(size * 0.22, -size * 0.58); ctx.stroke();
+      ctx.strokeStyle = '#cfd6e0'; ctx.lineWidth = size * 0.08; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.28, size * 0.12); ctx.lineTo(size * 0.5, -size * 0.16); ctx.stroke();
+      ctx.fillStyle = '#bfe9ff'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.fillRect(size * 0.34, -size * 0.04, size * 0.18, size * 0.18); ctx.strokeRect(size * 0.34, -size * 0.04, size * 0.18, size * 0.18);
+    } else if (d.id === 'frost_e') {
+      // Cryomancer — staff capped with a single ice crystal
+      ctx.strokeStyle = '#6f4a2a'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.42, size * 0.28); ctx.lineTo(size * 0.42, -size * 0.5); ctx.stroke();
+      ctx.fillStyle = '#9fe3ff'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 8; ctx.shadowColor = '#9fe3ff';
+      _diamond(ctx, size * 0.42, -size * 0.58, size * 0.12, size * 0.2); ctx.fill(); ctx.stroke();
+      ctx.shadowBlur = 0;
+    } else if (d.id === 'frost_l') {
+      // Glacier Sage — white beard, heavy staff, orbiting ice shards
+      ctx.fillStyle = '#eef6ff'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-size * 0.15, -size * 0.3);
+      ctx.quadraticCurveTo(0, size * 0.08, size * 0.15, -size * 0.3);
+      ctx.quadraticCurveTo(0, -size * 0.18, -size * 0.15, -size * 0.3); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#5a6b80'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.44, size * 0.3); ctx.lineTo(size * 0.44, -size * 0.56); ctx.stroke();
+      ctx.fillStyle = '#bff0ff'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 10; ctx.shadowColor = '#bff0ff';
+      _diamond(ctx, size * 0.44, -size * 0.66, size * 0.15, size * 0.26); ctx.fill(); ctx.stroke();
+      for (let i = 0; i < 3; i++) {
+        const a = t * 2.2 + i * 2.094;
+        ctx.fillStyle = '#dff6ff';
+        _diamond(ctx, Math.cos(a) * size * 0.5, Math.sin(a) * size * 0.18 - size * 0.1, size * 0.05, size * 0.09);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    } else if (d.id === 'frost_m') {
+      // Blizzard King — crown + swirling snow
+      ctx.fillStyle = '#ffd23f'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.beginPath();
       ctx.moveTo(-size * 0.2, -size * 0.7); ctx.lineTo(-size * 0.1, -size * 0.6);
       ctx.lineTo(0, -size * 0.75); ctx.lineTo(size * 0.1, -size * 0.6);
       ctx.lineTo(size * 0.2, -size * 0.7); ctx.lineTo(size * 0.2, -size * 0.5);
       ctx.lineTo(-size * 0.2, -size * 0.5); ctx.closePath();
       ctx.fill(); ctx.stroke();
-      // Swirling snow particles
-      for (let i = 0; i < 3; i++) {
-        const angle = t * 10 + i * Math.PI * 0.66;
-        const sx = Math.cos(angle) * size * 0.5;
-        const sy = Math.sin(angle) * size * 0.2 - size * 0.4;
+      for (let i = 0; i < 4; i++) {
+        const angle = t * 6 + i * Math.PI * 0.5;
         ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(sx, sy, 2, 0, Math.PI * 2); ctx.fill();
+        _diamond(ctx, Math.cos(angle) * size * 0.55, Math.sin(angle) * size * 0.22 - size * 0.35, size * 0.05, size * 0.08);
+        ctx.fill();
       }
     }
   } else if (d.family === 'burn') {
-    if (d.id === 'burn_c' || d.id === 'burn_r') { // Torch Bearer/Hot-fixer
-      ctx.strokeStyle = '#8b4513'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(size * 0.4, 0); ctx.lineTo(size * 0.4, -size * 0.3); ctx.stroke(); // Torch stick
-      ctx.fillStyle = '#f00';
-      ctx.beginPath(); ctx.arc(size * 0.4, -size * 0.35, size * 0.1, 0, Math.PI * 2); ctx.fill(); // Flame
-    } else if (d.id === 'burn_e' || d.id === 'burn_l') { // Firefighter/Wildfire
-      ctx.fillStyle = '#ff0'; // Yellow helmet
-      ctx.beginPath(); ctx.arc(0, -size * 0.6, size * 0.3, Math.PI, 0); ctx.fill(); ctx.stroke();
-    } else if (d.id === 'burn_m') { // Inferno Lord
-      ctx.fillStyle = '#555';
-      ctx.fillRect(-size * 0.4, -size * 0.1, size * 0.3, size * 0.4); // Backpack tank
-      ctx.fillStyle = '#333';
-      ctx.fillRect(size * 0.3, -size * 0.1, size * 0.5, size * 0.15); // Nozzle
-      if (t % 0.4 < 0.2) {
-        ctx.fillStyle = '#ff7e3a';
-        ctx.beginPath(); ctx.arc(size * 0.8, -size * 0.02, size * 0.1, 0, Math.PI * 2); ctx.fill();
+    if (d.id === 'burn_c') {
+      // Torch Bearer — a simple hand torch
+      ctx.strokeStyle = '#6f4a2a'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.42, size * 0.1); ctx.lineTo(size * 0.42, -size * 0.26); ctx.stroke();
+      _flame(ctx, size * 0.42, -size * 0.34, size * 0.11, t);
+    } else if (d.id === 'burn_r') {
+      // Hot-fixer — wrench arm tipped with a flame
+      ctx.strokeStyle = '#cfd6e0'; ctx.lineWidth = size * 0.09; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.28, size * 0.14); ctx.lineTo(size * 0.48, -size * 0.14); ctx.stroke();
+      ctx.fillStyle = '#cfd6e0';
+      ctx.beginPath(); ctx.arc(size * 0.5, -size * 0.16, size * 0.07, 0, Math.PI * 2); ctx.fill();
+      _flame(ctx, size * 0.5, -size * 0.28, size * 0.09, t);
+    } else if (d.id === 'burn_e') {
+      // Firefighter — red helmet + hose nozzle
+      ctx.fillStyle = '#e23b2e'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, -size * 0.48, size * 0.3, Math.PI, 0); ctx.fill(); ctx.stroke();
+      ctx.fillRect(-size * 0.34, -size * 0.5, size * 0.68, size * 0.06);
+      ctx.fillStyle = '#ffd23f';
+      ctx.beginPath(); ctx.arc(0, -size * 0.56, size * 0.06, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3a3f48';
+      ctx.fillRect(size * 0.28, -size * 0.06, size * 0.4, size * 0.12);
+      _flame(ctx, size * 0.74, 0, size * 0.1, t);
+    } else if (d.id === 'burn_l') {
+      // Wildfire — a swirling vortex of flame, no helmet
+      for (let i = 0; i < 5; i++) {
+        const a = t * 4 + i * 1.2566;
+        _flame(ctx, Math.cos(a) * size * 0.5, Math.sin(a) * size * 0.28 - size * 0.05, size * 0.09, t + i);
       }
-    } else if (d.id === 'vulcan') { // Vulcan
-      // Magma core body
-      ctx.fillStyle = '#222';
-      ctx.fillRect(-size * 0.5, -size * 0.2, size, size * 0.6); // Blocky armor
-      // Glowing magma cracks
-      ctx.strokeStyle = '#ff4500';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-size * 0.3, 0); ctx.lineTo(-size * 0.1, size * 0.2); ctx.lineTo(size * 0.2, -size * 0.1); ctx.lineTo(size * 0.4, size * 0.1);
-      ctx.stroke();
-      if (t % 0.6 < 0.3) {
-        ctx.fillStyle = '#ff8a3a';
-        ctx.beginPath(); ctx.arc(0, 0, size * 0.15, 0, Math.PI * 2); ctx.fill(); // Core pulse
-      }
+    } else if (d.id === 'burn_m') {
+      // Inferno Lord — backpack flamethrower
+      ctx.fillStyle = '#3a3f48'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.fillRect(-size * 0.42, -size * 0.12, size * 0.28, size * 0.4); ctx.strokeRect(-size * 0.42, -size * 0.12, size * 0.28, size * 0.4);
+      ctx.fillStyle = '#23262c';
+      ctx.fillRect(size * 0.3, -size * 0.08, size * 0.5, size * 0.14);
+      _flame(ctx, size * 0.86, -size * 0.02, size * 0.13, t);
     }
   } else if (d.family === 'sniper') {
-    if (d.id === 'sniper_c' || d.id === 'sniper_r') { // Bowman/Marksman
-      ctx.strokeStyle = '#8b4513'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(size * 0.3, 0, size * 0.4, -Math.PI / 2, Math.PI / 2); ctx.stroke(); // Bow
-    } else if (d.id === 'sniper_e' || d.id === 'sniper_l') { // Sharpshooter/Eagle Eye
-      ctx.fillStyle = '#333';
-      ctx.fillRect(size * 0.2, -size * 0.1, size * 0.6, size * 0.18); // Rifle
-    } else if (d.id === 'sniper_m') { // Elite Sniper
-      ctx.fillStyle = '#333';
-      ctx.fillRect(size * 0.2, -size * 0.1, size * 0.7, size * 0.2); // Advanced Rifle
-      ctx.fillStyle = '#444';
-      ctx.beginPath(); ctx.arc(0, -size * 0.6, size * 0.3, Math.PI, 0); ctx.fill(); // Tactical Helmet
+    if (d.id === 'sniper_c') {
+      // Bowman — short bow with a nocked arrow
+      ctx.strokeStyle = '#6f4a2a'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(size * 0.3, 0, size * 0.4, -Math.PI / 2.3, Math.PI / 2.3); ctx.stroke();
+      ctx.strokeStyle = '#cfd6e0'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(size * 0.12, 0); ctx.lineTo(size * 0.56, 0); ctx.stroke();
+    } else if (d.id === 'sniper_r') {
+      // Marksman — crossbow + targeting reticle
+      ctx.strokeStyle = '#5a3a22'; ctx.lineWidth = size * 0.08; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.12, 0); ctx.lineTo(size * 0.56, 0); ctx.stroke();
+      ctx.strokeStyle = '#3a4250'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(size * 0.44, -size * 0.22); ctx.lineTo(size * 0.44, size * 0.22); ctx.stroke();
+      ctx.strokeStyle = '#d6ecff'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(size * 0.44, -size * 0.22); ctx.lineTo(size * 0.2, 0); ctx.lineTo(size * 0.44, size * 0.22); ctx.stroke();
+      ctx.strokeStyle = '#ff5a5a'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(size * 0.74, -size * 0.32, size * 0.1, 0, Math.PI * 2);
+      ctx.moveTo(size * 0.6, -size * 0.32); ctx.lineTo(size * 0.88, -size * 0.32);
+      ctx.moveTo(size * 0.74, -size * 0.46); ctx.lineTo(size * 0.74, -size * 0.18); ctx.stroke();
+    } else if (d.id === 'sniper_e') {
+      // Sharpshooter — shouldered rifle
+      ctx.save(); ctx.rotate(-0.16);
+      ctx.fillStyle = '#2c2f36'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.fillRect(size * 0.1, -size * 0.06, size * 0.6, size * 0.14); ctx.strokeRect(size * 0.1, -size * 0.06, size * 0.6, size * 0.14);
+      ctx.fillStyle = '#1a1d22';
+      ctx.fillRect(size * 0.14, size * 0.04, size * 0.12, size * 0.2);
+      ctx.restore();
+    } else if (d.id === 'sniper_l') {
+      // Eagle Eye — long scoped rifle + a green plume on the hood
+      ctx.save(); ctx.rotate(-0.13);
+      ctx.fillStyle = '#23262c'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.fillRect(size * 0.05, -size * 0.05, size * 0.82, size * 0.12); ctx.strokeRect(size * 0.05, -size * 0.05, size * 0.82, size * 0.12);
+      ctx.fillStyle = '#3a4756';
+      ctx.fillRect(size * 0.32, -size * 0.16, size * 0.22, size * 0.1);
+      ctx.restore();
+      ctx.strokeStyle = '#a8e055'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-size * 0.16, -size * 0.52); ctx.quadraticCurveTo(-size * 0.34, -size * 0.66, -size * 0.34, -size * 0.82); ctx.stroke();
+    } else if (d.id === 'sniper_m') {
+      // Elite Sniper — advanced rifle + tactical helmet
+      ctx.save(); ctx.rotate(-0.1);
+      ctx.fillStyle = '#1c1f24'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.fillRect(size * 0.04, -size * 0.05, size * 0.92, size * 0.13); ctx.strokeRect(size * 0.04, -size * 0.05, size * 0.92, size * 0.13);
+      ctx.fillStyle = '#3a4756';
+      ctx.fillRect(size * 0.34, -size * 0.18, size * 0.26, size * 0.12);
+      ctx.restore();
+      ctx.fillStyle = '#3a4047'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, -size * 0.55, size * 0.3, Math.PI, 0); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#26e0ff'; ctx.shadowBlur = 6; ctx.shadowColor = '#26e0ff';
+      ctx.fillRect(-size * 0.18, -size * 0.56, size * 0.36, size * 0.05); ctx.shadowBlur = 0;
     }
   } else if (d.family === 'bruiser') {
-    if (d.id === 'bruis_c' || d.id === 'bruis_r') { // Squire/Warrior
-      ctx.fillStyle = '#8b4513';
-      ctx.fillRect(-size * 0.5, -size * 0.1, size * 0.25, size * 0.4); // Shield
-    } else if (d.id === 'bruis_e' || d.id === 'bruis_l') { // Gladiator/Champion
-      ctx.strokeStyle = '#aaa'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(size * 0.4, 0); ctx.lineTo(size * 0.4, -size * 0.4); ctx.stroke(); // Weapon
-    } else if (d.id === 'bruis_m' || d.id === 'haley') { // Berserker/Immortal Haley
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath(); ctx.arc(-size * 0.5, 0, size * 0.3, 0, Math.PI * 2); // Muscle L
-      ctx.arc(size * 0.5, 0, size * 0.3, 0, Math.PI * 2); // Muscle R
-      ctx.fill(); ctx.stroke();
+    if (d.id === 'bruis_c') {
+      // Squire — small wooden buckler
+      ctx.fillStyle = '#8a5a2b'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(-size * 0.46, size * 0.02, size * 0.14, size * 0.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#cfa86b'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-size * 0.46, -size * 0.16); ctx.lineTo(-size * 0.46, size * 0.2); ctx.stroke();
+    } else if (d.id === 'bruis_r') {
+      // Warrior — round steel shield + sword
+      ctx.fillStyle = '#b0b6c0'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(-size * 0.46, size * 0.02, size * 0.17, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = accent;
+      ctx.beginPath(); ctx.arc(-size * 0.46, size * 0.02, size * 0.06, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#dfe6ef'; ctx.lineWidth = size * 0.07; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.4, size * 0.2); ctx.lineTo(size * 0.52, -size * 0.34); ctx.stroke();
+      ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = size * 0.1;
+      ctx.beginPath(); ctx.moveTo(size * 0.3, size * 0.14); ctx.lineTo(size * 0.5, size * 0.14); ctx.stroke();
+    } else if (d.id === 'bruis_e') {
+      // Gladiator — crested helmet + trident
+      ctx.fillStyle = '#c9ccd2'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, -size * 0.42, size * 0.32, Math.PI, 0); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#e23b2e';
+      ctx.beginPath(); ctx.moveTo(0, -size * 0.92); ctx.quadraticCurveTo(size * 0.12, -size * 0.7, 0, -size * 0.5);
+      ctx.quadraticCurveTo(-size * 0.12, -size * 0.7, 0, -size * 0.92); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#cdb35a'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.5, size * 0.3); ctx.lineTo(size * 0.5, -size * 0.55); ctx.stroke();
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(size * 0.38, -size * 0.5); ctx.lineTo(size * 0.38, -size * 0.72);
+      ctx.moveTo(size * 0.5, -size * 0.55); ctx.lineTo(size * 0.5, -size * 0.8);
+      ctx.moveTo(size * 0.62, -size * 0.5); ctx.lineTo(size * 0.62, -size * 0.72); ctx.stroke();
+    } else if (d.id === 'bruis_l') {
+      // Champion — golden laurel + great axe
+      ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(0, -size * 0.38, size * 0.36, Math.PI * 0.78, Math.PI * 0.22, true); ctx.stroke();
+      ctx.strokeStyle = '#5a3a22'; ctx.lineWidth = size * 0.08;
+      ctx.beginPath(); ctx.moveTo(size * 0.44, size * 0.32); ctx.lineTo(size * 0.52, -size * 0.5); ctx.stroke();
+      ctx.fillStyle = '#c9ccd2'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(size * 0.52, -size * 0.5);
+      ctx.quadraticCurveTo(size * 0.88, -size * 0.42, size * 0.72, -size * 0.14);
+      ctx.lineTo(size * 0.5, -size * 0.22); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (d.id === 'bruis_m') {
+      // Berserker — bulging muscle arms + rage marks
+      ctx.fillStyle = bodyGrad; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(-size * 0.5, 0, size * 0.3, 0, Math.PI * 2);
+      ctx.arc(size * 0.5, 0, size * 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      for (const sx of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(sx * size * 0.16, -size * 0.66); ctx.lineTo(sx * size * 0.22, -size * 0.5);
+        ctx.stroke();
+      }
     }
   } else if (d.family === 'arcane') {
-    if (d.id === 'arc_c' || d.id === 'arc_r') { // Apprentice/Wizard
-      ctx.strokeStyle = '#8b4513'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(size * 0.4, 0); ctx.lineTo(size * 0.5, -size * 0.3); ctx.stroke(); // Wand
-    } else if (d.id === 'arc_m' || d.id === 'ato') { // Storm Archon/Immortal Ato
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath(); // Tall Hat
-      ctx.moveTo(-size * 0.3, -size * 0.5); ctx.lineTo(0, -size * 0.9); ctx.lineTo(size * 0.3, -size * 0.5); ctx.closePath();
+    if (d.id === 'arc_c') {
+      // Apprentice — short wand with a spark
+      ctx.strokeStyle = '#6f4a2a'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.35, size * 0.2); ctx.lineTo(size * 0.5, -size * 0.18); ctx.stroke();
+      ctx.fillStyle = accent; ctx.shadowBlur = 8; ctx.shadowColor = accent;
+      _star(ctx, size * 0.52, -size * 0.24, size * 0.09, size * 0.04, 4, t * 3);
+      ctx.shadowBlur = 0;
+    } else if (d.id === 'arc_r') {
+      // Wizard — orbed staff + spellbook
+      ctx.strokeStyle = '#5a3a22'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.46, size * 0.3); ctx.lineTo(size * 0.46, -size * 0.52); ctx.stroke();
+      ctx.fillStyle = accent; ctx.shadowBlur = 8; ctx.shadowColor = accent;
+      ctx.beginPath(); ctx.arc(size * 0.46, -size * 0.58, size * 0.1, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.fillStyle = '#3a6ea5'; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.fillRect(-size * 0.56, -size * 0.02, size * 0.2, size * 0.26); ctx.strokeRect(-size * 0.56, -size * 0.02, size * 0.2, size * 0.26);
+    } else if (d.id === 'arc_e') {
+      // Mana Catalyst — a triad of orbiting mana orbs
+      ctx.shadowBlur = 8; ctx.shadowColor = accent; ctx.fillStyle = accent;
+      for (let i = 0; i < 3; i++) {
+        const a = t * 2.4 + i * 2.094;
+        ctx.beginPath(); ctx.arc(Math.cos(a) * size * 0.5, Math.sin(a) * size * 0.18 - size * 0.1, size * 0.07, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    } else if (d.id === 'arc_l') {
+      // Archmage — tall hat + floating crystal ball
+      ctx.fillStyle = bodyGrad; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-size * 0.26, -size * 0.5); ctx.lineTo(size * 0.04, -size * 0.92); ctx.lineTo(size * 0.26, -size * 0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = _lighten(bodyColor, 0.2);
+      ctx.beginPath(); ctx.ellipse(0, -size * 0.5, size * 0.3, size * 0.07, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = hexToRgba(accent, 0.85); ctx.strokeStyle = OUTLINE; ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 10; ctx.shadowColor = accent;
+      ctx.beginPath(); ctx.arc(size * 0.5, 0, size * 0.13, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.beginPath(); ctx.arc(size * 0.46, -size * 0.05, size * 0.04, 0, Math.PI * 2); ctx.fill();
+    } else if (d.id === 'arc_m') {
+      // Storm Archon — tall hat, flowing robe, crackling sparks
+      ctx.fillStyle = bodyGrad; ctx.strokeStyle = OUTLINE; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-size * 0.3, -size * 0.5); ctx.lineTo(0, -size * 0.92); ctx.lineTo(size * 0.3, -size * 0.5); ctx.closePath();
       ctx.fill(); ctx.stroke();
-      // Robe extensions
       ctx.fillRect(-size * 0.35, size * 0.1, size * 0.1, size * 0.3);
       ctx.fillRect(size * 0.25, size * 0.1, size * 0.1, size * 0.3);
-    } else if (d.id === 'angel') { // Archangel
-      // Wings
-      const wingFlap = Math.sin(t * 10) * 0.2;
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.ellipse(-size * 0.4, -size * 0.2, size * 0.5, size * 0.2, -Math.PI / 4 + wingFlap, 0, Math.PI * 2);
-      ctx.ellipse(size * 0.4, -size * 0.2, size * 0.5, size * 0.2, Math.PI / 4 - wingFlap, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      // Halo
-      ctx.strokeStyle = '#ffd700';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(0, -size * 0.8, size * 0.3, size * 0.1, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.strokeStyle = '#fff36b'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.04, -size * 0.92); ctx.lineTo(-size * 0.06, -size * 1.04);
+      ctx.lineTo(size * 0.05, -size * 1.02); ctx.lineTo(-size * 0.04, -size * 1.14); ctx.stroke();
     }
   }
 
@@ -2432,67 +2613,46 @@ function drawUnitAt(ctx, u, x, y, ghost = false) {
   ctx.ellipse(x, y + 22, 22, 5, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Base platform
-  ctx.fillStyle = '#1c2436';
-  ctx.beginPath();
-  ctx.arc(x, y, 26, 0, Math.PI * 2);
-  ctx.fill();
+  // === Rarity oval base ===
+  // The old encircling ring is gone: guardians now stand on a glossy oval
+  // pedestal tinted with their "level colour", so rarity reads from the disc
+  // beneath them rather than a circle drawn around their body.
+  const baseY = y + 15, baseRX = 24, baseRY = 8.5;
 
-  // Rarity ring
-  ctx.strokeStyle = color;
-  ctx.lineWidth = (d.rarity === 'Mythic' || d.rarity === 'Immortal') ? 4 : 3;
-  ctx.beginPath();
-  ctx.arc(x, y, 26, 0, Math.PI * 2);
-  ctx.stroke();
-
-  if (d.rarity === 'Legendary') {
-    // Pulsing glow
+  // Higher tiers get a soft coloured underglow pulsing beneath the disc.
+  if (d.rarity === 'Legendary' || d.rarity === 'Mythic' || d.rarity === 'Immortal') {
     const pulse = 0.5 + 0.5 * Math.sin(t * 4);
-    ctx.shadowBlur = 10 + pulse * 10;
-    ctx.shadowColor = color;
-    ctx.strokeStyle = `rgba(176, 107, 240, ${0.4 + pulse * 0.4})`;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(x, y, 30, t, t + Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  } else if (d.rarity === 'Mythic') {
-    ctx.strokeStyle = 'rgba(244, 155, 58, 0.4)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.arc(x, y, 30, t, t + Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.save();
+    ctx.shadowBlur = 14 + pulse * 12;
+    ctx.shadowColor = d.rarity === 'Immortal' ? `hsl(${(t * 120) % 360} 90% 60%)` : color;
+    ctx.fillStyle = hexToRgba(d.rarity === 'Immortal' ? '#ffffff' : color, 0.5);
+    ctx.beginPath(); ctx.ellipse(x, baseY, baseRX + 3, baseRY + 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
 
-    // Rotating orbs
+  // Disc body — vertical gradient reads as a lit-from-above 3D pedestal.
+  const baseGrad = ctx.createLinearGradient(0, baseY - baseRY, 0, baseY + baseRY);
+  baseGrad.addColorStop(0, _lighten(color, 0.45));
+  baseGrad.addColorStop(1, _darken(color, 0.35));
+  ctx.fillStyle = baseGrad;
+  ctx.strokeStyle = _darken(color, 0.45);
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(x, baseY, baseRX, baseRY, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // Glossy top highlight.
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = _lighten(color, 0.55);
+  ctx.beginPath(); ctx.ellipse(x, baseY - baseRY * 0.35, baseRX * 0.65, baseRY * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // Mythic keeps its signature orbs, now skimming the rim of the base.
+  if (d.rarity === 'Mythic') {
     for (let i = 0; i < 3; i++) {
-      const angle = t * 3 + (i / 3) * Math.PI * 2;
-      const ox = x + Math.cos(angle) * 32;
-      const oy = y + Math.sin(angle) * 32;
-      ctx.fillStyle = '#f49b3a';
-      ctx.beginPath();
-      ctx.arc(ox, oy, 4, 0, Math.PI * 2);
-      ctx.fill();
-      // small glow for orbs
-      ctx.shadowBlur = 5;
-      ctx.shadowColor = '#f49b3a';
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-    }
-  } else if (d.rarity === 'Immortal') {
-    // Rainbow glow
-    ctx.shadowBlur = 20;
-    ctx.shadowColor = `hsl(${(t * 100) % 360} 100% 50%)`;
-
-    for (let i = 0; i < 6; i++) {
-      const a0 = t * 2 + i * Math.PI / 3;
-      const a1 = a0 + Math.PI / 5;
-      ctx.strokeStyle = `hsl(${(t * 120 + i * 60) % 360} 90% 65%)`;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(x, y, 32, a0, a1);
-      ctx.stroke();
+      const a = t * 3 + (i / 3) * Math.PI * 2;
+      const ox = x + Math.cos(a) * (baseRX + 4);
+      const oy = baseY + Math.sin(a) * (baseRY + 2);
+      ctx.fillStyle = '#f9c06a'; ctx.shadowBlur = 6; ctx.shadowColor = '#f49b3a';
+      ctx.beginPath(); ctx.arc(ox, oy, 3, 0, Math.PI * 2); ctx.fill();
     }
     ctx.shadowBlur = 0;
   }
