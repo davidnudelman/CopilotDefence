@@ -16,8 +16,11 @@ const STARTING_HP = 18;
 const SUMMON_COST_START = 10;
 const SUMMON_COST_STEP = 7;
 const SUMMON_COST_CAP = 110;
-const WAVE_AUTO_DELAY = 4;
+const WAVE_AUTO_DELAY = 6;
 const WAVE_FIRST_DELAY = 2;
+// Hard cap: once the last mob of a wave has spawned, the next wave releases at
+// most this many seconds later — even if the previous wave isn't fully cleared.
+const WAVE_SPAWN_CAP = 15;
 
 /* === Map / path definitions ===
  * Each map provides waypoints (from offscreen to offscreen). WAYPOINTS and
@@ -179,6 +182,77 @@ const POOLS = {
   Mythic:    ['frost_m', 'burn_m', 'sniper_m', 'bruis_m', 'arc_m'],
   Immortal:  ['haley', 'ato', 'angel', 'vulcan'],
 };
+
+const FAMILY_IDS = ['frost', 'burn', 'sniper', 'bruiser', 'arcane'];
+
+/* Sell values for the premium high rarities (refunded in stones).
+ * Common/Rare are computed dynamically from the current summon cost, and
+ * Immortals cannot be sold at all (see sellValue). */
+const SELL_VALUES = {
+  Epic:      { stones: 1 },
+  Legendary: { stones: 2 },
+  Mythic:    { stones: 5 },
+};
+
+/* What selling a unit (and its stack) yields, with a display label.
+ * Returns null when the unit cannot be sold (Immortals). */
+function sellValue(d, stackCount = 1) {
+  if (d.rarity === 'Immortal') return null;
+  const mult = stackCount > 1 ? stackCount : 1;
+  if (d.rarity === 'Common' || d.rarity === 'Rare') {
+    // Scale with the live summon cost: Common 30%, Rare 65%.
+    const pct = d.rarity === 'Common' ? 0.30 : 0.65;
+    const amount = Math.max(1, Math.round(game.summonCost * pct)) * mult;
+    return { amount, currency: 'gold', label: `${amount}g` };
+  }
+  const v = SELL_VALUES[d.rarity];
+  if (!v) return null;
+  const amount = v.stones * mult;
+  return { amount, currency: 'stones', label: `${amount}🔷` };
+}
+
+/* Each run rolls fresh per-family summon weights so the unit mix feels
+ * distinct game-to-game instead of a uniform spread every time. */
+function makeSummonWeights() {
+  const w = {};
+  for (const f of FAMILY_IDS) w[f] = 0.5 + Math.random() * 1.7;
+  return w;
+}
+
+/* Weighted family pick (using this run's weights) with a penalty on the last
+ * family summoned, so streaks of the exact same unit are far less likely. */
+function rollSummonId() {
+  const weights = game.summonWeights || (game.summonWeights = makeSummonWeights());
+  let total = 0;
+  const adj = FAMILY_IDS.map(f => {
+    let x = weights[f];
+    if (f === game.lastSummonFamily) x *= 0.4;
+    total += x;
+    return x;
+  });
+  let r = Math.random() * total;
+  let fam = FAMILY_IDS[FAMILY_IDS.length - 1];
+  for (let i = 0; i < FAMILY_IDS.length; i++) {
+    r -= adj[i];
+    if (r <= 0) { fam = FAMILY_IDS[i]; break; }
+  }
+  game.lastSummonFamily = fam;
+  const rarity = Math.random() < 0.78 ? 'Common' : 'Rare';
+  return POOLS[rarity].find(uid => UNITS[uid].family === fam);
+}
+
+/* On upgrade, a unit has a 35% chance to morph into a different family of the
+ * same rarity — adds surprise so the board isn't a fixed family ladder.
+ * Immortals are exempt: their named results always come out stable. */
+const TYPE_SHIFT_CHANCE = 0.35;
+function applyTypeShift(resultId) {
+  const d = UNITS[resultId];
+  if (!d || d.rarity === 'Immortal') return resultId;
+  if (Math.random() >= TYPE_SHIFT_CHANCE) return resultId;
+  const others = (POOLS[d.rarity] || []).filter(id => id !== resultId);
+  if (!others.length) return resultId;
+  return others[Math.floor(Math.random() * others.length)];
+}
 
 const ABILITY_DESCRIPTIONS = {
   frostBomb:      'Every full mana: AoE freezes all enemies in range for 2.0s.',
@@ -430,6 +504,8 @@ const game = {
   hp: STARTING_HP,
   wave: 1,
   summonCost: SUMMON_COST_START,
+  summonWeights: null,
+  lastSummonFamily: null,
   units: [],
   enemies: [],
   beams: [],
@@ -438,6 +514,7 @@ const game = {
   spawnTimer: 0,
   waveRunning: false,
   nextWaveDelay: null,
+  waveCapTimer: null,
   speed: 1,
   selectedUnit: null,
   draggingUnit: null,
@@ -638,6 +715,7 @@ function startWave() {
   game.spawnQueue = buildWave(game.wave);
   game.spawnTimer = 0.4;
   game.waveRunning = true;
+  game.waveCapTimer = null;
   game.waveEscapes = 0;
   showBanner(`Wave ${game.wave}${game.wave % 10 === 0 ? ' — BOSS' : ''}`);
   log(`Wave ${game.wave} starts`);
@@ -661,9 +739,14 @@ function updateWaveSpawning(dt) {
 }
 
 function checkWaveComplete() {
-  if (game.spawnQueue.length === 0 && game.enemies.length === 0) {
+  const allSpawned = game.spawnQueue.length === 0;
+  const cleared = allSpawned && game.enemies.length === 0;
+  const capReached = allSpawned && game.waveCapTimer !== null && game.waveCapTimer <= 0;
+  if (cleared || capReached) {
     game.waveRunning = false;
-    log(`Wave ${game.wave} cleared`, 'gold');
+    game.waveCapTimer = null;
+    if (cleared) log(`Wave ${game.wave} cleared`, 'gold');
+    else log(`Wave ${game.wave} timed out — next wave incoming`, 'danger');
     if (game.waveEscapes === 0) unlock('untouched');
     if (game.wave % 5 === 0) {
       game.stones += 1;
@@ -1268,8 +1351,7 @@ function spawnUnit(id, col, row) {
 function summon() {
   if (game.gold < game.summonCost) return;
 
-  const rarity = Math.random() < 0.78 ? 'Common' : 'Rare';
-  const id = POOLS[rarity][Math.floor(Math.random() * POOLS[rarity].length)];
+  const id = rollSummonId();
 
   const cell = findEmptyCell(id);
   if (!cell) { log('Board is full', 'danger'); return; }
@@ -1357,10 +1439,15 @@ function mergeSelected() {
       if (idx >= 0) game.units.splice(idx, 1);
     }
 
-    const newUnit = spawnUnit(recipeId, keepCell.col, keepCell.row);
+    const resultId = applyTypeShift(recipeId);
+    const newUnit = spawnUnit(resultId, keepCell.col, keepCell.row);
     game.selectedUnit = newUnit;
     completeMission('firstMerge');
-    log(`Merge → ${UNITS[recipeId].name}!`, UNITS[recipeId].rarity.toLowerCase());
+    if (resultId !== recipeId) {
+      log(`Merge → ${UNITS[resultId].name}! (shifted from ${UNITS[recipeId].name})`, UNITS[resultId].rarity.toLowerCase());
+    } else {
+      log(`Merge → ${UNITS[resultId].name}!`, UNITS[resultId].rarity.toLowerCase());
+    }
     updateUI();
   } else {
     // Check for Mythic or Immortal recipes
@@ -1401,8 +1488,10 @@ function mergeSelected() {
         game.units.splice(idx, 1);
       }
 
-      const newUnit = spawnUnit(foundRecipe.result, keepCell.col, keepCell.row);
-      const newRarity = UNITS[foundRecipe.result].rarity;
+      // Immortals stay stable; Mythic results can still shift family.
+      const resultId = applyTypeShift(foundRecipe.result);
+      const newUnit = spawnUnit(resultId, keepCell.col, keepCell.row);
+      const newRarity = UNITS[resultId].rarity;
       const c = cellCenter(keepCell.col, keepCell.row);
 
       if (newRarity === 'Mythic') {
@@ -1416,7 +1505,8 @@ function mergeSelected() {
       }
 
       game.selectedUnit = newUnit;
-      log(`Recipe Complete: ${UNITS[foundRecipe.result].name}! (-${foundRecipe.stones} stones)`, newRarity.toLowerCase());
+      const shifted = resultId !== foundRecipe.result ? ` (shifted to ${UNITS[resultId].name})` : '';
+      log(`Recipe Complete: ${UNITS[resultId].name}!${shifted} (-${foundRecipe.stones} stones)`, newRarity.toLowerCase());
       updateUI();
     } else {
       log(`${d.name} cannot be merged or lacks ingredients/stones for a recipe`, 'danger');
@@ -1428,15 +1518,16 @@ function sellSelected() {
   const u = game.selectedUnit;
   if (!u) return;
   const d = UNITS[u.id];
-  let refund = { Common: 4, Rare: 9, Epic: 35, Legendary: 100, Mythic: 250, Immortal: 600 }[d.rarity];
-  if (u.stackCount > 1) refund *= u.stackCount;
-  game.gold += refund;
+  const v = sellValue(d, u.stackCount);
+  if (!v) { log(`${d.name} cannot be sold`, 'danger'); return; }
+  if (v.currency === 'stones') game.stones += v.amount;
+  else game.gold += v.amount;
   const onBoard = game.units.indexOf(u);
   if (onBoard >= 0) game.units.splice(onBoard, 1);
   const inDungeon = game.dungeon.units.indexOf(u);
   if (inDungeon >= 0) game.dungeon.units.splice(inDungeon, 1);
   game.selectedUnit = null;
-  log(`Sold ${d.name} (+${refund}g)`, 'gold');
+  log(`Sold ${d.name} (+${v.label})`, v.currency === 'stones' ? 'epic' : 'gold');
   renderDungeon();
   updateUI();
 }
@@ -2821,6 +2912,17 @@ function drawEnemies(ctx) {
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(0, 0, sz * 1.6, 0, Math.PI * 2); ctx.fill();
+
+      // Solid body disc + pulsing shield ring. Without an opaque backing the
+      // bare emoji read as see-through against the path; protected mobs now
+      // sit on a solid orb so they always look solid and clearly shielded.
+      ctx.fillStyle = 'rgba(22,20,26,0.92)';
+      ctx.beginPath(); ctx.arc(0, 0, sz * 0.95, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = e.accent;
+      ctx.lineWidth = 2.5;
+      ctx.globalAlpha = 0.7 + 0.3 * pulse;
+      ctx.beginPath(); ctx.arc(0, 0, sz * 0.95, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     // Sturdy (slow-resist) mobs wear a hint of armor plating.
@@ -2992,7 +3094,15 @@ function gameLoop(timestamp) {
   game.lastTime = timestamp;
 
   if (game.view === 'game' && !game.gameOver) {
-    if (game.waveRunning) updateWaveSpawning(dt);
+    if (game.waveRunning) {
+      updateWaveSpawning(dt);
+      // Once the final mob has spawned, count down the hard cap so a wave can
+      // never drag on longer than WAVE_SPAWN_CAP seconds past its last spawn.
+      if (game.spawnQueue.length === 0) {
+        if (game.waveCapTimer === null) game.waveCapTimer = WAVE_SPAWN_CAP;
+        else game.waveCapTimer = Math.max(0, game.waveCapTimer - dt);
+      }
+    }
     updateEnemies(dt);
     updateUnits(dt);
     updateAI(dt);
@@ -3001,7 +3111,10 @@ function gameLoop(timestamp) {
       game.nextWaveDelay -= dt;
       if (game.nextWaveDelay <= 0) {
         game.nextWaveDelay = null;
+        hideCountdown();
         startWave();
+      } else {
+        showCountdown(Math.ceil(game.nextWaveDelay));
       }
     }
     updateGolem(dt);
@@ -3233,6 +3346,7 @@ function setupUI() {
   ui.endText      = document.getElementById('end-text');
   ui.restart      = document.getElementById('restart');
   ui.waveBanner   = document.getElementById('wave-banner');
+  ui.waveCountdown = document.getElementById('wave-countdown');
 
   ui.legendaryBtn       = document.getElementById('legendary-btn');
   ui.legendaryCost      = document.getElementById('legendary-cost');
@@ -3409,6 +3523,9 @@ function renderUnitInfo() {
     ${recipeHtml}
   `;
   ui.unitActions.hidden = false;
+  const sv = sellValue(d, u.stackCount);
+  ui.sellBtn.hidden = !sv;
+  if (sv) ui.sellBtn.innerHTML = `<span class="btn-label">Sell</span><span class="btn-cost">+${sv.label}</span>`;
   ui.mergeBtn.hidden = !isReadyToMerge(u);
   ui.dungeonBtn.hidden = !dungeonRecruitable(u);
 }
@@ -3760,6 +3877,17 @@ function showBanner(text) {
   setTimeout(() => { ui.waveBanner.hidden = true; }, 1450);
 }
 
+function showCountdown(secs) {
+  if (!ui.waveCountdown) return;
+  ui.waveCountdown.textContent = `Next wave in ${secs}`;
+  ui.waveCountdown.hidden = false;
+}
+
+function hideCountdown() {
+  if (!ui.waveCountdown) return;
+  ui.waveCountdown.hidden = true;
+}
+
 function endGame(victory) {
   game.gameOver = true;
   game.runActive = false;
@@ -3812,6 +3940,8 @@ function restart() {
   game.hp = STARTING_HP;
   game.wave = 1;
   game.summonCost = SUMMON_COST_START;
+  game.summonWeights = makeSummonWeights();
+  game.lastSummonFamily = null;
   game.units = [];
   game.enemies = [];
   game.beams = [];
@@ -3820,6 +3950,8 @@ function restart() {
   game.spawnTimer = 0;
   game.waveRunning = false;
   game.nextWaveDelay = WAVE_FIRST_DELAY;
+  game.waveCapTimer = null;
+  hideCountdown();
   game.selectedUnit = null;
   game.draggingUnit = null;
   game.upgrades = { Common: 0, Epic: 0, Mythic: 0 };
