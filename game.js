@@ -180,6 +180,74 @@ const POOLS = {
   Immortal:  ['haley', 'ato', 'angel', 'vulcan'],
 };
 
+const FAMILY_IDS = ['frost', 'burn', 'sniper', 'bruiser', 'arcane'];
+
+/* Sell values: low rarities refund gold, the premium high rarities refund
+ * stones (Epic → 1, Legendary → 2, scaling up from there). */
+const SELL_VALUES = {
+  Common:    { gold: 4 },
+  Rare:      { gold: 9 },
+  Epic:      { stones: 1 },
+  Legendary: { stones: 2 },
+  Mythic:    { stones: 4 },
+  Immortal:  { stones: 8 },
+};
+
+/* What selling a unit (and its stack) yields, with a display label. */
+function sellValue(d, stackCount = 1) {
+  const v = SELL_VALUES[d.rarity] || { gold: 0 };
+  const mult = stackCount > 1 ? stackCount : 1;
+  if (v.stones) {
+    const amount = v.stones * mult;
+    return { amount, currency: 'stones', label: `${amount}🔷` };
+  }
+  const amount = (v.gold || 0) * mult;
+  return { amount, currency: 'gold', label: `${amount}g` };
+}
+
+/* Each run rolls fresh per-family summon weights so the unit mix feels
+ * distinct game-to-game instead of a uniform spread every time. */
+function makeSummonWeights() {
+  const w = {};
+  for (const f of FAMILY_IDS) w[f] = 0.5 + Math.random() * 1.7;
+  return w;
+}
+
+/* Weighted family pick (using this run's weights) with a penalty on the last
+ * family summoned, so streaks of the exact same unit are far less likely. */
+function rollSummonId() {
+  const weights = game.summonWeights || (game.summonWeights = makeSummonWeights());
+  let total = 0;
+  const adj = FAMILY_IDS.map(f => {
+    let x = weights[f];
+    if (f === game.lastSummonFamily) x *= 0.4;
+    total += x;
+    return x;
+  });
+  let r = Math.random() * total;
+  let fam = FAMILY_IDS[FAMILY_IDS.length - 1];
+  for (let i = 0; i < FAMILY_IDS.length; i++) {
+    r -= adj[i];
+    if (r <= 0) { fam = FAMILY_IDS[i]; break; }
+  }
+  game.lastSummonFamily = fam;
+  const rarity = Math.random() < 0.78 ? 'Common' : 'Rare';
+  return POOLS[rarity].find(uid => UNITS[uid].family === fam);
+}
+
+/* On upgrade, a unit has a 35% chance to morph into a different family of the
+ * same rarity — adds surprise so the board isn't a fixed family ladder.
+ * Immortals are exempt: their named results always come out stable. */
+const TYPE_SHIFT_CHANCE = 0.35;
+function applyTypeShift(resultId) {
+  const d = UNITS[resultId];
+  if (!d || d.rarity === 'Immortal') return resultId;
+  if (Math.random() >= TYPE_SHIFT_CHANCE) return resultId;
+  const others = (POOLS[d.rarity] || []).filter(id => id !== resultId);
+  if (!others.length) return resultId;
+  return others[Math.floor(Math.random() * others.length)];
+}
+
 const ABILITY_DESCRIPTIONS = {
   frostBomb:      'Every full mana: AoE freezes all enemies in range for 2.0s.',
   infernoBlast:   'Every full mana: massive AoE explosion + heavy 4.0s burn.',
@@ -430,6 +498,8 @@ const game = {
   hp: STARTING_HP,
   wave: 1,
   summonCost: SUMMON_COST_START,
+  summonWeights: null,
+  lastSummonFamily: null,
   units: [],
   enemies: [],
   beams: [],
@@ -1268,8 +1338,7 @@ function spawnUnit(id, col, row) {
 function summon() {
   if (game.gold < game.summonCost) return;
 
-  const rarity = Math.random() < 0.78 ? 'Common' : 'Rare';
-  const id = POOLS[rarity][Math.floor(Math.random() * POOLS[rarity].length)];
+  const id = rollSummonId();
 
   const cell = findEmptyCell(id);
   if (!cell) { log('Board is full', 'danger'); return; }
@@ -1357,10 +1426,15 @@ function mergeSelected() {
       if (idx >= 0) game.units.splice(idx, 1);
     }
 
-    const newUnit = spawnUnit(recipeId, keepCell.col, keepCell.row);
+    const resultId = applyTypeShift(recipeId);
+    const newUnit = spawnUnit(resultId, keepCell.col, keepCell.row);
     game.selectedUnit = newUnit;
     completeMission('firstMerge');
-    log(`Merge → ${UNITS[recipeId].name}!`, UNITS[recipeId].rarity.toLowerCase());
+    if (resultId !== recipeId) {
+      log(`Merge → ${UNITS[resultId].name}! (shifted from ${UNITS[recipeId].name})`, UNITS[resultId].rarity.toLowerCase());
+    } else {
+      log(`Merge → ${UNITS[resultId].name}!`, UNITS[resultId].rarity.toLowerCase());
+    }
     updateUI();
   } else {
     // Check for Mythic or Immortal recipes
@@ -1401,8 +1475,10 @@ function mergeSelected() {
         game.units.splice(idx, 1);
       }
 
-      const newUnit = spawnUnit(foundRecipe.result, keepCell.col, keepCell.row);
-      const newRarity = UNITS[foundRecipe.result].rarity;
+      // Immortals stay stable; Mythic results can still shift family.
+      const resultId = applyTypeShift(foundRecipe.result);
+      const newUnit = spawnUnit(resultId, keepCell.col, keepCell.row);
+      const newRarity = UNITS[resultId].rarity;
       const c = cellCenter(keepCell.col, keepCell.row);
 
       if (newRarity === 'Mythic') {
@@ -1416,7 +1492,8 @@ function mergeSelected() {
       }
 
       game.selectedUnit = newUnit;
-      log(`Recipe Complete: ${UNITS[foundRecipe.result].name}! (-${foundRecipe.stones} stones)`, newRarity.toLowerCase());
+      const shifted = resultId !== foundRecipe.result ? ` (shifted to ${UNITS[resultId].name})` : '';
+      log(`Recipe Complete: ${UNITS[resultId].name}!${shifted} (-${foundRecipe.stones} stones)`, newRarity.toLowerCase());
       updateUI();
     } else {
       log(`${d.name} cannot be merged or lacks ingredients/stones for a recipe`, 'danger');
@@ -1428,15 +1505,15 @@ function sellSelected() {
   const u = game.selectedUnit;
   if (!u) return;
   const d = UNITS[u.id];
-  let refund = { Common: 4, Rare: 9, Epic: 35, Legendary: 100, Mythic: 250, Immortal: 600 }[d.rarity];
-  if (u.stackCount > 1) refund *= u.stackCount;
-  game.gold += refund;
+  const v = sellValue(d, u.stackCount);
+  if (v.currency === 'stones') game.stones += v.amount;
+  else game.gold += v.amount;
   const onBoard = game.units.indexOf(u);
   if (onBoard >= 0) game.units.splice(onBoard, 1);
   const inDungeon = game.dungeon.units.indexOf(u);
   if (inDungeon >= 0) game.dungeon.units.splice(inDungeon, 1);
   game.selectedUnit = null;
-  log(`Sold ${d.name} (+${refund}g)`, 'gold');
+  log(`Sold ${d.name} (+${v.label})`, v.currency === 'stones' ? 'epic' : 'gold');
   renderDungeon();
   updateUI();
 }
@@ -3409,6 +3486,8 @@ function renderUnitInfo() {
     ${recipeHtml}
   `;
   ui.unitActions.hidden = false;
+  const sv = sellValue(d, u.stackCount);
+  ui.sellBtn.innerHTML = `<span class="btn-label">Sell</span><span class="btn-cost">+${sv.label}</span>`;
   ui.mergeBtn.hidden = !isReadyToMerge(u);
   ui.dungeonBtn.hidden = !dungeonRecruitable(u);
 }
@@ -3812,6 +3891,8 @@ function restart() {
   game.hp = STARTING_HP;
   game.wave = 1;
   game.summonCost = SUMMON_COST_START;
+  game.summonWeights = makeSummonWeights();
+  game.lastSummonFamily = null;
   game.units = [];
   game.enemies = [];
   game.beams = [];
