@@ -1129,12 +1129,27 @@ main { display: block; }
 #speed-btn { background: var(--bg-3); }
 
 /* Log panel */
+#wave-countdown {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 209, 102, 0.4);
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
 #log-panel {
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   padding: 6px 12px;
-  max-height: 72px;
+  max-height: 123px;
   overflow-y: auto;
   font-size: 11px;
   color: var(--text-dim);
@@ -1161,7 +1176,7 @@ main { display: block; }
   .stat .label { font-size: 8px; }
   .stat span:not(.label):not(.dim) { font-size: 13px; }
   #board-wrap { border-radius: 10px; }
-  #log-panel { max-height: 56px; }
+  #log-panel { max-height: 107px; }
   #controls { grid-template-columns: repeat(3, 1fr); }
   #wave-btn { grid-column: span 3; }
   #action-bar button { font-size: 11px; padding: 8px 6px; min-height: 38px; }

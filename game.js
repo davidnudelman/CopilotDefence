@@ -16,8 +16,11 @@ const STARTING_HP = 18;
 const SUMMON_COST_START = 10;
 const SUMMON_COST_STEP = 7;
 const SUMMON_COST_CAP = 110;
-const WAVE_AUTO_DELAY = 4;
+const WAVE_AUTO_DELAY = 6;
 const WAVE_FIRST_DELAY = 2;
+// Hard cap: once the last mob of a wave has spawned, the next wave releases at
+// most this many seconds later — even if the previous wave isn't fully cleared.
+const WAVE_SPAWN_CAP = 15;
 
 /* === Map / path definitions ===
  * Each map provides waypoints (from offscreen to offscreen). WAYPOINTS and
@@ -511,6 +514,7 @@ const game = {
   spawnTimer: 0,
   waveRunning: false,
   nextWaveDelay: null,
+  waveCapTimer: null,
   speed: 1,
   selectedUnit: null,
   draggingUnit: null,
@@ -711,6 +715,7 @@ function startWave() {
   game.spawnQueue = buildWave(game.wave);
   game.spawnTimer = 0.4;
   game.waveRunning = true;
+  game.waveCapTimer = null;
   game.waveEscapes = 0;
   showBanner(`Wave ${game.wave}${game.wave % 10 === 0 ? ' — BOSS' : ''}`);
   log(`Wave ${game.wave} starts`);
@@ -734,9 +739,14 @@ function updateWaveSpawning(dt) {
 }
 
 function checkWaveComplete() {
-  if (game.spawnQueue.length === 0 && game.enemies.length === 0) {
+  const allSpawned = game.spawnQueue.length === 0;
+  const cleared = allSpawned && game.enemies.length === 0;
+  const capReached = allSpawned && game.waveCapTimer !== null && game.waveCapTimer <= 0;
+  if (cleared || capReached) {
     game.waveRunning = false;
-    log(`Wave ${game.wave} cleared`, 'gold');
+    game.waveCapTimer = null;
+    if (cleared) log(`Wave ${game.wave} cleared`, 'gold');
+    else log(`Wave ${game.wave} timed out — next wave incoming`, 'danger');
     if (game.waveEscapes === 0) unlock('untouched');
     if (game.wave % 5 === 0) {
       game.stones += 1;
@@ -3073,7 +3083,15 @@ function gameLoop(timestamp) {
   game.lastTime = timestamp;
 
   if (game.view === 'game' && !game.gameOver) {
-    if (game.waveRunning) updateWaveSpawning(dt);
+    if (game.waveRunning) {
+      updateWaveSpawning(dt);
+      // Once the final mob has spawned, count down the hard cap so a wave can
+      // never drag on longer than WAVE_SPAWN_CAP seconds past its last spawn.
+      if (game.spawnQueue.length === 0) {
+        if (game.waveCapTimer === null) game.waveCapTimer = WAVE_SPAWN_CAP;
+        else game.waveCapTimer = Math.max(0, game.waveCapTimer - dt);
+      }
+    }
     updateEnemies(dt);
     updateUnits(dt);
     updateAI(dt);
@@ -3082,7 +3100,10 @@ function gameLoop(timestamp) {
       game.nextWaveDelay -= dt;
       if (game.nextWaveDelay <= 0) {
         game.nextWaveDelay = null;
+        hideCountdown();
         startWave();
+      } else {
+        showCountdown(Math.ceil(game.nextWaveDelay));
       }
     }
     updateGolem(dt);
@@ -3314,6 +3335,7 @@ function setupUI() {
   ui.endText      = document.getElementById('end-text');
   ui.restart      = document.getElementById('restart');
   ui.waveBanner   = document.getElementById('wave-banner');
+  ui.waveCountdown = document.getElementById('wave-countdown');
 
   ui.legendaryBtn       = document.getElementById('legendary-btn');
   ui.legendaryCost      = document.getElementById('legendary-cost');
@@ -3844,6 +3866,17 @@ function showBanner(text) {
   setTimeout(() => { ui.waveBanner.hidden = true; }, 1450);
 }
 
+function showCountdown(secs) {
+  if (!ui.waveCountdown) return;
+  ui.waveCountdown.textContent = `Next wave in ${secs}`;
+  ui.waveCountdown.hidden = false;
+}
+
+function hideCountdown() {
+  if (!ui.waveCountdown) return;
+  ui.waveCountdown.hidden = true;
+}
+
 function endGame(victory) {
   game.gameOver = true;
   game.runActive = false;
@@ -3906,6 +3939,8 @@ function restart() {
   game.spawnTimer = 0;
   game.waveRunning = false;
   game.nextWaveDelay = WAVE_FIRST_DELAY;
+  game.waveCapTimer = null;
+  hideCountdown();
   game.selectedUnit = null;
   game.draggingUnit = null;
   game.upgrades = { Common: 0, Epic: 0, Mythic: 0 };
