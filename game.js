@@ -182,27 +182,30 @@ const POOLS = {
 
 const FAMILY_IDS = ['frost', 'burn', 'sniper', 'bruiser', 'arcane'];
 
-/* Sell values: low rarities refund gold, the premium high rarities refund
- * stones (Epic → 1, Legendary → 2, scaling up from there). */
+/* Sell values for the premium high rarities (refunded in stones).
+ * Common/Rare are computed dynamically from the current summon cost, and
+ * Immortals cannot be sold at all (see sellValue). */
 const SELL_VALUES = {
-  Common:    { gold: 4 },
-  Rare:      { gold: 9 },
   Epic:      { stones: 1 },
   Legendary: { stones: 2 },
-  Mythic:    { stones: 4 },
-  Immortal:  { stones: 8 },
+  Mythic:    { stones: 5 },
 };
 
-/* What selling a unit (and its stack) yields, with a display label. */
+/* What selling a unit (and its stack) yields, with a display label.
+ * Returns null when the unit cannot be sold (Immortals). */
 function sellValue(d, stackCount = 1) {
-  const v = SELL_VALUES[d.rarity] || { gold: 0 };
+  if (d.rarity === 'Immortal') return null;
   const mult = stackCount > 1 ? stackCount : 1;
-  if (v.stones) {
-    const amount = v.stones * mult;
-    return { amount, currency: 'stones', label: `${amount}🔷` };
+  if (d.rarity === 'Common' || d.rarity === 'Rare') {
+    // Scale with the live summon cost: Common 30%, Rare 65%.
+    const pct = d.rarity === 'Common' ? 0.30 : 0.65;
+    const amount = Math.max(1, Math.round(game.summonCost * pct)) * mult;
+    return { amount, currency: 'gold', label: `${amount}g` };
   }
-  const amount = (v.gold || 0) * mult;
-  return { amount, currency: 'gold', label: `${amount}g` };
+  const v = SELL_VALUES[d.rarity];
+  if (!v) return null;
+  const amount = v.stones * mult;
+  return { amount, currency: 'stones', label: `${amount}🔷` };
 }
 
 /* Each run rolls fresh per-family summon weights so the unit mix feels
@@ -1506,6 +1509,7 @@ function sellSelected() {
   if (!u) return;
   const d = UNITS[u.id];
   const v = sellValue(d, u.stackCount);
+  if (!v) { log(`${d.name} cannot be sold`, 'danger'); return; }
   if (v.currency === 'stones') game.stones += v.amount;
   else game.gold += v.amount;
   const onBoard = game.units.indexOf(u);
@@ -3487,7 +3491,8 @@ function renderUnitInfo() {
   `;
   ui.unitActions.hidden = false;
   const sv = sellValue(d, u.stackCount);
-  ui.sellBtn.innerHTML = `<span class="btn-label">Sell</span><span class="btn-cost">+${sv.label}</span>`;
+  ui.sellBtn.hidden = !sv;
+  if (sv) ui.sellBtn.innerHTML = `<span class="btn-label">Sell</span><span class="btn-cost">+${sv.label}</span>`;
   ui.mergeBtn.hidden = !isReadyToMerge(u);
   ui.dungeonBtn.hidden = !dungeonRecruitable(u);
 }
