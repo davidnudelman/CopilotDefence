@@ -241,10 +241,10 @@ function rollSummonId() {
   return POOLS[rarity].find(uid => UNITS[uid].family === fam);
 }
 
-/* On upgrade, a unit has a 35% chance to morph into a different family of the
+/* On upgrade, a unit has a 17% chance to morph into a different family of the
  * same rarity — adds surprise so the board isn't a fixed family ladder.
  * Immortals are exempt: their named results always come out stable. */
-const TYPE_SHIFT_CHANCE = 0.35;
+const TYPE_SHIFT_CHANCE = 0.17;
 function applyTypeShift(resultId) {
   const d = UNITS[resultId];
   if (!d || d.rarity === 'Immortal') return resultId;
