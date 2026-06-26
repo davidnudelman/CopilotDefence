@@ -13,6 +13,15 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <title>Copilot Defence</title>
+  <meta name="description" content="A merge tower defense — six families hold the line against bugs and errors." />
+  <meta property="og:title" content="Copilot Defence" />
+  <meta property="og:description" content="A merge tower defense — six families hold the line." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="thumbnail.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Copilot Defence" />
+  <meta name="twitter:description" content="A merge tower defense — six families hold the line." />
+  <meta name="twitter:image" content="thumbnail.svg" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -20,7 +29,7 @@
   <section id="welcome-screen" aria-label="Welcome">
     <div class="welcome-inner">
       <header class="welcome-header">
-        <span class="logo">CD</span>
+        <img class="logo logo-img" src="icon.svg" alt="Copilot Defence crest" width="56" height="56" />
         <div>
           <h1>Copilot Defence</h1>
           <p class="tagline">Defend the codebase against bugs and errors.</p>
@@ -136,7 +145,7 @@
     <div id="app">
       <header id="topbar">
         <button id="menu-btn" type="button" class="brand-btn" aria-label="Back to menu">
-          <span class="logo">CD</span>
+          <img class="logo logo-img" src="icon.svg" alt="" width="30" height="30" />
           <span class="title">Copilot Defence</span>
         </button>
         <div class="stats">
@@ -144,7 +153,9 @@
           <div class="stat"><span class="label">Gold</span><span id="gold-display">50</span></div>
           <div class="stat"><span class="label">Stones</span><span id="stones-display">0</span></div>
           <div class="stat hp"><span class="label">HP</span><span id="hp-display">20</span></div>
+          <div class="stat"><span class="label">DPS</span><span id="dps-display">0</span></div>
         </div>
+        <button id="settings-btn" type="button" class="icon-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Settings">⚙</button>
       </header>
 
       <nav id="action-bar" aria-label="Game actions">
@@ -160,6 +171,11 @@
           <span class="btn-label">Recipes</span>
         </button>
       </nav>
+
+      <div id="hud-strip">
+        <div id="econ-readout"></div>
+        <div id="golem-telegraph" hidden></div>
+      </div>
 
       <main>
         <div id="board-wrap">
@@ -213,6 +229,21 @@
       <div id="log-panel">
         <ul id="log-list"></ul>
       </div>
+
+      <section id="inspector-panel" aria-label="Inspector" hidden>
+        <header class="inspector-head">
+          <h3>Inspector</h3>
+          <button id="inspector-close" type="button" aria-label="Close inspector">×</button>
+        </header>
+        <div class="inspector-scroll">
+          <div id="unit-info-body"></div>
+          <div id="unit-actions" hidden>
+            <button id="sell-btn">Sell</button>
+            <button id="merge-btn" hidden>Merge ×3</button>
+            <button id="dungeon-btn" hidden>Send to Dungeon</button>
+          </div>
+        </div>
+      </section>
     </div>
 
     <div id="sheet-backdrop" aria-hidden="true"></div>
@@ -246,19 +277,37 @@
       <div class="sheet-body" id="artifacts-body"></div>
     </aside>
 
-    <aside id="inspector-sheet" class="sheet" role="dialog" aria-label="Inspector" aria-modal="false">
+    <aside id="settings-popup" class="sheet" role="dialog" aria-label="Settings" aria-modal="false">
       <header>
         <span class="grab"></span>
-        <h3>Inspector</h3>
-        <button id="inspector-close" type="button" aria-label="Close" data-close="inspector">×</button>
+        <h3>Settings</h3>
+        <button id="settings-close" type="button" aria-label="Close" data-close="settings">×</button>
       </header>
       <div class="sheet-body">
-        <div id="unit-info-body"></div>
-        <div id="unit-actions" hidden>
-          <button id="sell-btn">Sell</button>
-          <button id="merge-btn" hidden>Merge ×3</button>
-          <button id="dungeon-btn" hidden>Send to Dungeon</button>
-        </div>
+        <label class="setting-row" for="opt-sound">
+          <span class="setting-text"><span class="setting-title">Sound effects</span><span class="setting-sub">UI clicks, abilities, boss deaths.</span></span>
+          <input type="checkbox" id="opt-sound" checked>
+          <span class="opt-switch" aria-hidden="true"></span>
+        </label>
+        <label class="setting-row" for="opt-reduce-motion">
+          <span class="setting-text"><span class="setting-title">Reduce motion</span><span class="setting-sub">Dampen screen shake &amp; particles.</span></span>
+          <input type="checkbox" id="opt-reduce-motion">
+          <span class="opt-switch" aria-hidden="true"></span>
+        </label>
+        <label class="setting-row" for="opt-colorblind">
+          <span class="setting-text"><span class="setting-title">Colorblind rarity cues</span><span class="setting-sub">Add a letter badge to each rarity.</span></span>
+          <input type="checkbox" id="opt-colorblind">
+          <span class="opt-switch" aria-hidden="true"></span>
+        </label>
+        <h4 class="settings-subhead">Shortcuts</h4>
+        <ul class="kbd-list">
+          <li><kbd>S</kbd> Summon</li>
+          <li><kbd>R</kbd> Epic Roulette</li>
+          <li><kbd>L</kbd> Legendary Roulette</li>
+          <li><kbd>M</kbd> Merge · <kbd>X</kbd> Sell</li>
+          <li><kbd>C</kbd> Cast ready ability on selected</li>
+          <li><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> Speed</li>
+        </ul>
       </div>
     </aside>
   </div>
