@@ -144,7 +144,9 @@
           <div class="stat"><span class="label">Gold</span><span id="gold-display">50</span></div>
           <div class="stat"><span class="label">Stones</span><span id="stones-display">0</span></div>
           <div class="stat hp"><span class="label">HP</span><span id="hp-display">20</span></div>
+          <div class="stat"><span class="label">DPS</span><span id="dps-display">0</span></div>
         </div>
+        <button id="settings-btn" type="button" class="icon-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Settings">⚙</button>
       </header>
 
       <nav id="action-bar" aria-label="Game actions">
@@ -165,6 +167,8 @@
         <div id="board-wrap">
           <canvas id="board" width="720" height="432"></canvas>
           <div id="board-hud">
+            <div id="econ-readout" aria-hidden="true"></div>
+            <div id="golem-telegraph" hidden></div>
             <div id="wave-banner" hidden></div>
             <div id="wave-countdown" hidden></div>
             <div id="game-over" hidden>
@@ -259,6 +263,40 @@
           <button id="merge-btn" hidden>Merge ×3</button>
           <button id="dungeon-btn" hidden>Send to Dungeon</button>
         </div>
+      </div>
+    </aside>
+
+    <aside id="settings-popup" class="sheet" role="dialog" aria-label="Settings" aria-modal="false">
+      <header>
+        <span class="grab"></span>
+        <h3>Settings</h3>
+        <button id="settings-close" type="button" aria-label="Close" data-close="settings">×</button>
+      </header>
+      <div class="sheet-body">
+        <label class="setting-row" for="opt-sound">
+          <span class="setting-text"><span class="setting-title">Sound effects</span><span class="setting-sub">UI clicks, abilities, boss deaths.</span></span>
+          <input type="checkbox" id="opt-sound" checked>
+          <span class="opt-switch" aria-hidden="true"></span>
+        </label>
+        <label class="setting-row" for="opt-reduce-motion">
+          <span class="setting-text"><span class="setting-title">Reduce motion</span><span class="setting-sub">Dampen screen shake &amp; particles.</span></span>
+          <input type="checkbox" id="opt-reduce-motion">
+          <span class="opt-switch" aria-hidden="true"></span>
+        </label>
+        <label class="setting-row" for="opt-colorblind">
+          <span class="setting-text"><span class="setting-title">Colorblind rarity cues</span><span class="setting-sub">Add a letter badge to each rarity.</span></span>
+          <input type="checkbox" id="opt-colorblind">
+          <span class="opt-switch" aria-hidden="true"></span>
+        </label>
+        <h4 class="settings-subhead">Shortcuts</h4>
+        <ul class="kbd-list">
+          <li><kbd>S</kbd> Summon</li>
+          <li><kbd>R</kbd> Epic Roulette</li>
+          <li><kbd>L</kbd> Legendary Roulette</li>
+          <li><kbd>M</kbd> Merge · <kbd>X</kbd> Sell</li>
+          <li><kbd>C</kbd> Cast ready ability on selected</li>
+          <li><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> Speed</li>
+        </ul>
       </div>
     </aside>
   </div>

@@ -96,7 +96,7 @@ const RARITY_COLORS = {
 const DIFFICULTIES = {
   normal: { id: 'normal', name: 'Normal', enemyHp: 1.00, bossHp: 1.00, def: 1.0, reward: 1.00, stunMult: 1.00, color: '#5fd870', desc: 'Entry-level. Forgiving scaling.' },
   hard:   { id: 'hard',   name: 'Hard',   enemyHp: 1.60, bossHp: 2.00, def: 1.3, reward: 1.25, stunMult: 0.50, color: '#f5c542', desc: 'Sharper HP scaling. Stuns half as long.' },
-  hell:   { id: 'hell',   name: 'Hell',   enemyHp: 3.00, bossHp: 4.50, def: 1.7, reward: 1.60, stunMult: 0.30, color: '#e25555', desc: 'Brutal HP walls. Pre-planned builds only.' },
+  hell:   { id: 'hell',   name: 'Hell',   enemyHp: 3.00, bossHp: 4.50, def: 1.7, reward: 1.60, stunMult: 0.40, color: '#e25555', desc: 'Brutal HP walls. Pre-planned builds only.' },
 };
 const DIFFICULTY_ORDER = ['normal', 'hard', 'hell'];
 
@@ -209,6 +209,24 @@ function sellValue(d, stackCount = 1) {
   if (!v) return null;
   const amount = v.stones * mult;
   return { amount, currency: 'stones', label: `${amount}🔷` };
+}
+
+/* Functional role label, derived from the unit's own data so the board reads
+ * by purpose (not just family/rarity). Order matters — the most defining trait
+ * wins. Used in the inspector and as a board chip. */
+function roleFor(d) {
+  if (!d) return '';
+  if (d.loot)                          return 'Gold Farm';
+  if (d.stun)                          return 'Stun';
+  if (d.defDown)                       return 'DEF-Down';
+  if (d.manaAura)                      return 'Support';
+  if (d.percentHP)                     return '% HP';
+  if (d.slow && d.freezeChance)        return 'Freeze CC';
+  if (d.slow)                          return 'Slow CC';
+  if (d.burn || (d.aoe && d.type === 'magic')) return d.type === 'magic' ? 'Magic AoE' : 'AoE';
+  if (d.family === 'sniper')           return 'Ranged DPS';
+  if (d.family === 'bruiser')          return d.type === 'physical' ? 'Heavy DPS' : 'DPS';
+  return d.type === 'magic' ? 'Magic DPS' : 'Physical DPS';
 }
 
 /* Each run rolls fresh per-family summon weights so the unit mix feels
@@ -443,6 +461,7 @@ function saveProgress() {
       coop: { enabled: game.coop.enabled },
       gems: game.gems,
       tokens: game.tokens,
+      opts: game.opts,
     }));
   } catch {}
 }
@@ -545,9 +564,70 @@ const game = {
     partnerUnits: [],
   },
   epTriggered: false,
+  opts: { sound: true, reduceMotion: false, colorblind: false },
+  summonsSinceRare: 0,
 };
 
 const ui = {};
+
+/* === Audio ===
+ * Tiny code-generated WebAudio SFX — no asset pipeline. Each sound is a short
+ * oscillator blip/chord. Respects the Sound setting and starts lazily on the
+ * first user gesture (browsers block audio until then). */
+const sfx = {
+  ctx: null,
+  ensure() {
+    if (!this.ctx) {
+      try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch { this.ctx = null; }
+    }
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+    return this.ctx;
+  },
+  tone(freq, dur, type = 'sine', gain = 0.18, delay = 0) {
+    if (!game.opts.sound) return;
+    const ac = this.ensure();
+    if (!ac) return;
+    const t0 = ac.currentTime + delay;
+    const osc = ac.createOscillator();
+    const g = ac.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(ac.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  },
+  play(name) {
+    if (!game.opts.sound) return;
+    switch (name) {
+      case 'summon':   this.tone(420, 0.10, 'triangle', 0.14); break;
+      case 'click':    this.tone(300, 0.05, 'square', 0.08); break;
+      case 'merge':    this.tone(440, 0.10, 'triangle', 0.16); this.tone(660, 0.16, 'triangle', 0.16, 0.07); break;
+      case 'upgrade':  this.tone(520, 0.08, 'sine', 0.13); this.tone(780, 0.12, 'sine', 0.12, 0.06); break;
+      case 'sell':     this.tone(360, 0.08, 'sine', 0.10); this.tone(240, 0.10, 'sine', 0.10, 0.05); break;
+      case 'ability':  this.tone(700, 0.10, 'sawtooth', 0.10); this.tone(1040, 0.12, 'sawtooth', 0.09, 0.05); break;
+      case 'epic':     this.tone(523, 0.10, 'triangle', 0.15); this.tone(784, 0.16, 'triangle', 0.15, 0.08); break;
+      case 'legendary':this.tone(523, 0.10, 'triangle', 0.16); this.tone(784, 0.10, 'triangle', 0.16, 0.08); this.tone(1046, 0.20, 'triangle', 0.16, 0.16); break;
+      case 'boss':     this.tone(180, 0.30, 'sawtooth', 0.20); this.tone(90, 0.40, 'sine', 0.18, 0.05); break;
+      case 'victory':  [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.16, i * 0.12)); break;
+      case 'defeat':   [392, 330, 262].forEach((f, i) => this.tone(f, 0.30, 'sine', 0.16, i * 0.16)); break;
+      case 'warn':     this.tone(220, 0.14, 'square', 0.12); break;
+    }
+  },
+};
+
+/* Apply accessibility/sound options to the DOM (board canvas effects read
+ * game.opts directly each frame). */
+function applyOpts() {
+  if (!game.opts) game.opts = { sound: true, reduceMotion: false, colorblind: false };
+  document.body.classList.toggle('reduce-motion', !!game.opts.reduceMotion);
+  document.body.classList.toggle('cb', !!game.opts.colorblind);
+  if (ui.optSound) ui.optSound.checked = game.opts.sound;
+  if (ui.optReduceMotion) ui.optReduceMotion.checked = game.opts.reduceMotion;
+  if (ui.optColorblind) ui.optColorblind.checked = game.opts.colorblind;
+}
 
 /* === Missions === */
 function makeMissions() {
@@ -598,6 +678,12 @@ const ENEMY_ARCHETYPES = [
   { id: 'void',    name: 'Void',    immune: 'magic',    color: '#5a3f93', accent: '#caa7ff', glyph: '🔮' },
   { id: 'granite', name: 'Granite', immune: 'stun',     color: '#6c5a3e', accent: '#c8b48a', glyph: '🗿' },
 ];
+
+/* Which archetype a boss/golem on a given wave will be (same cycle as makeEnemy),
+ * so the HUD can telegraph the incoming immunity before it spawns. */
+function archetypeForWave(wave) {
+  return ENEMY_ARCHETYPES[(Math.floor(wave / 10) - 1 + ENEMY_ARCHETYPES.length * 100) % ENEMY_ARCHETYPES.length];
+}
 
 function immuneLabel(im) {
   return { burn: 'burn', slow: 'slow & freeze', physical: 'physical', magic: 'magic', stun: 'stun' }[im] || im;
@@ -717,8 +803,14 @@ function startWave() {
   game.waveRunning = true;
   game.waveCapTimer = null;
   game.waveEscapes = 0;
-  showBanner(`Wave ${game.wave}${game.wave % 10 === 0 ? ' — BOSS' : ''}`);
-  log(`Wave ${game.wave} starts`);
+  if (game.wave % 10 === 0) {
+    const arch = archetypeForWave(game.wave);
+    showBanner(`Wave ${game.wave} — BOSS · ${arch.glyph} ${arch.name} (resists ${immuneLabel(arch.immune)})`);
+    log(`Boss incoming: ${arch.name} — resists ${immuneLabel(arch.immune)}`, 'danger');
+  } else {
+    showBanner(`Wave ${game.wave}`);
+    log(`Wave ${game.wave} starts`);
+  }
   updateUI();
 }
 
@@ -730,7 +822,7 @@ function updateWaveSpawning(dt) {
     game.enemies.push(enemy);
     if (next.kind === 'boss') {
       triggerShake(8, 0.6);
-      showBanner('⚠ BOSS INCOMING ⚠');
+      showBanner(`⚠ ${enemy.bossName || 'BOSS'} — resists ${immuneLabel(enemy.immune)} ⚠`);
       spawnRing(enemy.x, enemy.y, 120, '#ff7e7e', 0.7, 4);
       spawnParticleBurst(enemy.x, enemy.y, '#ff7e7e', 24);
     }
@@ -830,15 +922,12 @@ function damageEnemy(enemy, dmg, type, killer) {
   } else if (type === 'magic') {
     actual = dmg * (1 - enemy.magicRes);
   }
-  // Archetype damage immunity: golems negate their counter outright (you simply
-  // can't kill the wrong golem and it walks off); bosses take a heavy resist so
-  // a mandatory boss is never literally unkillable.
+  // Archetype damage immunity: golems and bosses both take a heavy resist
+  // against their counter type rather than negating it outright, so a focused
+  // single-damage-type board is slowed — not hard-walled — by the wrong matchup.
+  // Golems stay tougher than bosses (10% vs 15%) since they are optional.
   if (enemy.immune === type) {
-    if (enemy.kind === 'golem') {
-      if (Math.random() < 0.4) spawnPopup(enemy.x, enemy.y - enemy.size, 'IMMUNE', '#9aa3b2');
-      return;
-    }
-    actual *= 0.15;
+    actual *= enemy.kind === 'golem' ? 0.10 : 0.15;
     if (Math.random() < 0.4) spawnPopup(enemy.x, enemy.y - enemy.size, 'RESIST', '#9aa3b2');
   }
   enemy.hp -= actual;
@@ -848,8 +937,8 @@ function damageEnemy(enemy, dmg, type, killer) {
     const burstColor = enemy.kind === 'boss' ? '#ff7e7e' : enemy.kind === 'golem' ? '#d2a76a' : enemy.color;
     const burstCount = enemy.kind === 'boss' || enemy.kind === 'golem' ? 26 : enemy.kind === 'elite' ? 14 : 8;
     spawnParticleBurst(enemy.x, enemy.y, burstColor, burstCount);
-    if (enemy.kind === 'boss')  triggerShake(8, 0.4);
-    if (enemy.kind === 'golem') triggerShake(6, 0.3);
+    if (enemy.kind === 'boss')  { triggerShake(8, 0.4); sfx.play('boss'); }
+    if (enemy.kind === 'golem') { triggerShake(6, 0.3); sfx.play('boss'); }
     onEnemyKilled(enemy, killer);
   }
 }
@@ -887,12 +976,22 @@ function onEnemyKilled(enemy, killer) {
 }
 
 /* === Units === */
+/* Per-level damage multiplier for an upgrade track. Beyond the flat +14%/+16%
+ * per level, every 5th level is a milestone worth a bonus +12% (§2.1) so deep
+ * investment has memorable payoff spikes instead of a featureless slope. */
+const UPGRADE_PER_LEVEL = { Common: 0.14, Epic: 0.14, Mythic: 0.16 };
+const UPGRADE_MILESTONE_BONUS = 0.12;
+function upgradeMult(track) {
+  const lvl = game.upgrades[track] || 0;
+  return 1 + UPGRADE_PER_LEVEL[track] * lvl + UPGRADE_MILESTONE_BONUS * Math.floor(lvl / 5);
+}
+
 function unitDamage(unit) {
   const d = UNITS[unit.id];
   let dmg = d.dmg;
-  if (d.rarity === 'Common' || d.rarity === 'Rare') dmg *= 1 + 0.14 * game.upgrades.Common;
-  else if (d.rarity === 'Epic')                     dmg *= 1 + 0.14 * game.upgrades.Epic;
-  else                                              dmg *= 1 + 0.16 * game.upgrades.Mythic;
+  if (d.rarity === 'Common' || d.rarity === 'Rare') dmg *= upgradeMult('Common');
+  else if (d.rarity === 'Epic')                     dmg *= upgradeMult('Epic');
+  else                                              dmg *= upgradeMult('Mythic');
 
   const famLvl = game.stats.unitLevels[d.family] || 1;
   dmg *= (1 + (famLvl - 1) * 0.04);
@@ -1100,6 +1199,7 @@ function updateAI(dt) {
 /* === Mythic / Immortal abilities === */
 function triggerAbility(u, target, c) {
   const d = UNITS[u.id];
+  sfx.play('ability');
   switch (d.ability) {
     case 'frostBomb': {
       const r = (d.range + 0.6) * TILE;
@@ -1348,17 +1448,29 @@ function spawnUnit(id, col, row) {
   return u;
 }
 
+// Pity (§4.1): a cold streak of Commons can stall the early game, so after this
+// many Commons in a row the next summon is guaranteed at least a Rare.
+const SUMMON_PITY_THRESHOLD = 4;
+
 function summon() {
   if (game.gold < game.summonCost) return;
 
-  const id = rollSummonId();
+  let id = rollSummonId();
+  // Force a Rare if the player has hit the Common-streak pity.
+  if (UNITS[id].rarity === 'Common' && game.summonsSinceRare >= SUMMON_PITY_THRESHOLD) {
+    const fam = UNITS[id].family;
+    id = POOLS.Rare.find(uid => UNITS[uid].family === fam) || id;
+    if (UNITS[id].rarity !== 'Common') log('Lucky break — pity Rare!', 'rare');
+  }
 
   const cell = findEmptyCell(id);
   if (!cell) { log('Board is full', 'danger'); return; }
 
   game.gold -= game.summonCost;
   game.summonCost = Math.min(SUMMON_COST_CAP, game.summonCost + SUMMON_COST_STEP);
+  game.summonsSinceRare = UNITS[id].rarity === 'Common' ? game.summonsSinceRare + 1 : 0;
   spawnUnit(id, cell[0], cell[1]);
+  sfx.play('summon');
   completeMission('firstSummon');
   updateUI();
 }
@@ -1371,10 +1483,15 @@ function rouletteEpic() {
   if (Math.random() < EPIC_ROULETTE_CHANCE) {
     const id = POOLS.Epic[Math.floor(Math.random() * POOLS.Epic.length)];
     spawnUnit(id, cell[0], cell[1]);
+    const c = cellCenter(cell[0], cell[1]);
+    spawnRing(c.x, c.y, 40, RARITY_COLORS.Epic, 0.5, 3);
+    spawnParticleBurst(c.x, c.y, RARITY_COLORS.Epic, 14);
+    sfx.play('epic');
   } else {
     const id = POOLS.Rare[Math.floor(Math.random() * POOLS.Rare.length)];
     spawnUnit(id, cell[0], cell[1]);
     log('Roulette missed — landed on a Rare', 'danger');
+    sfx.play('click');
   }
   updateUI();
 }
@@ -1389,11 +1506,14 @@ function rouletteLegendary() {
     spawnUnit(id, cell[0], cell[1]);
     triggerShake(4, 0.25);
     const c = cellCenter(cell[0], cell[1]);
+    spawnRing(c.x, c.y, 56, RARITY_COLORS.Legendary, 0.6, 4);
     spawnParticleBurst(c.x, c.y, RARITY_COLORS.Legendary, 18);
+    sfx.play('legendary');
   } else {
     const id = POOLS.Epic[Math.floor(Math.random() * POOLS.Epic.length)];
     spawnUnit(id, cell[0], cell[1]);
     log('Roulette missed — landed on an Epic', 'danger');
+    sfx.play('epic');
   }
   updateUI();
 }
@@ -1434,17 +1554,24 @@ function mergeSelected() {
       }
     }
 
+    const fromCells = toRemove.map(item => ({ col: item.unit.col, row: item.unit.row }));
     for (const item of toRemove) {
       const idx = game.units.indexOf(item.unit);
       if (idx >= 0) game.units.splice(idx, 1);
     }
 
     const resultId = applyTypeShift(recipeId);
+    const c = cellCenter(keepCell.col, keepCell.row);
+    spawnMergeVacuum(fromCells, keepCell.col, keepCell.row, RARITY_COLORS[UNITS[resultId].rarity]);
+    spawnRing(c.x, c.y, 34, RARITY_COLORS[UNITS[resultId].rarity], 0.45, 3);
+    spawnParticleBurst(c.x, c.y, RARITY_COLORS[UNITS[resultId].rarity], game.opts.reduceMotion ? 6 : 14);
+    sfx.play('merge');
     const newUnit = spawnUnit(resultId, keepCell.col, keepCell.row);
     game.selectedUnit = newUnit;
     completeMission('firstMerge');
     if (resultId !== recipeId) {
       log(`Merge → ${UNITS[resultId].name}! (shifted from ${UNITS[recipeId].name})`, UNITS[resultId].rarity.toLowerCase());
+      spawnPopup(c.x, c.y - 24, 'FAMILY SHIFTED!', '#ffd166');
     } else {
       log(`Merge → ${UNITS[resultId].name}!`, UNITS[resultId].rarity.toLowerCase());
     }
@@ -1481,6 +1608,7 @@ function mergeSelected() {
     if (foundRecipe) {
       game.stones -= foundRecipe.stones;
       const keepCell = { col: game.units[foundRecipe.matchIdxs[0]].col, row: game.units[foundRecipe.matchIdxs[0]].row };
+      const fromCells = foundRecipe.matchIdxs.map(idx => ({ col: game.units[idx].col, row: game.units[idx].row }));
 
       // Sort indexes descending to remove safely
       foundRecipe.matchIdxs.sort((a, b) => b - a);
@@ -1490,22 +1618,28 @@ function mergeSelected() {
 
       // Immortals stay stable; Mythic results can still shift family.
       const resultId = applyTypeShift(foundRecipe.result);
-      const newUnit = spawnUnit(resultId, keepCell.col, keepCell.row);
       const newRarity = UNITS[resultId].rarity;
       const c = cellCenter(keepCell.col, keepCell.row);
+      spawnMergeVacuum(fromCells, keepCell.col, keepCell.row, RARITY_COLORS[newRarity]);
+      const newUnit = spawnUnit(resultId, keepCell.col, keepCell.row);
 
       if (newRarity === 'Mythic') {
         unlock('forge');
         spawnRing(c.x, c.y, 48, RARITY_COLORS.Mythic, 0.55, 4);
         spawnParticleBurst(c.x, c.y, RARITY_COLORS.Mythic, 18);
+        sfx.play('legendary');
       } else if (newRarity === 'Immortal') {
         spawnRing(c.x, c.y, 64, '#ffffff', 0.7, 5);
         spawnParticleBurst(c.x, c.y, '#ffffff', 26);
         triggerShake(6, 0.35);
+        sfx.play('victory');
+      } else {
+        sfx.play('merge');
       }
 
       game.selectedUnit = newUnit;
       const shifted = resultId !== foundRecipe.result ? ` (shifted to ${UNITS[resultId].name})` : '';
+      if (shifted) spawnPopup(c.x, c.y - 24, 'FAMILY SHIFTED!', '#ffd166');
       log(`Recipe Complete: ${UNITS[resultId].name}!${shifted} (-${foundRecipe.stones} stones)`, newRarity.toLowerCase());
       updateUI();
     } else {
@@ -1528,6 +1662,7 @@ function sellSelected() {
   if (inDungeon >= 0) game.dungeon.units.splice(inDungeon, 1);
   game.selectedUnit = null;
   log(`Sold ${d.name} (+${v.label})`, v.currency === 'stones' ? 'epic' : 'gold');
+  sfx.play('sell');
   renderDungeon();
   updateUI();
 }
@@ -1657,7 +1792,14 @@ function upgrade(tier) {
   if (game.gold < cost) return;
   game.gold -= cost;
   game.upgrades[tier]++;
-  log(`${tier} damage upgraded → Lv ${game.upgrades[tier]}`, 'gold');
+  const lvl = game.upgrades[tier];
+  if (lvl % 5 === 0) {
+    log(`${tier} damage Lv ${lvl} — MILESTONE! +${Math.round(UPGRADE_MILESTONE_BONUS * 100)}% bonus`, 'legendary');
+    sfx.play('legendary');
+  } else {
+    log(`${tier} damage upgraded → Lv ${lvl}`, 'gold');
+    sfx.play('upgrade');
+  }
   updateUI();
 }
 
@@ -1712,9 +1854,16 @@ function updateEffects(dt) {
   game.popups = game.popups.filter(p => p.life > 0);
   for (const p of game.particles) {
     p.life -= dt;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    p.vy += 240 * dt;
+    if (p.suck) {
+      // Homing "vacuum" particle: accelerate toward the merge target point.
+      const dx = p.tx - p.x, dy = p.ty - p.y;
+      p.x += dx * Math.min(1, 9 * dt);
+      p.y += dy * Math.min(1, 9 * dt);
+    } else {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 240 * dt;
+    }
   }
   game.particles = game.particles.filter(p => p.life > 0);
   for (const r of game.rings) {
@@ -1741,6 +1890,27 @@ function spawnParticleBurst(x, y, color, count = 8) {
       life, maxLife: life,
       size: 1.5 + Math.random() * 2,
     });
+  }
+}
+
+/* Merge "vacuum" (§6.2): pull motes from each source cell into the result cell,
+ * then a light burst lands there (caller adds the burst). */
+function spawnMergeVacuum(fromCells, toCol, toRow, color) {
+  const to = cellCenter(toCol, toRow);
+  for (const cell of fromCells) {
+    const from = cellCenter(cell.col, cell.row);
+    const n = game.opts.reduceMotion ? 3 : 7;
+    for (let i = 0; i < n; i++) {
+      const jx = (Math.random() - 0.5) * TILE * 0.5;
+      const jy = (Math.random() - 0.5) * TILE * 0.5;
+      const life = 0.28 + Math.random() * 0.16;
+      game.particles.push({
+        x: from.x + jx, y: from.y + jy, color,
+        tx: to.x, ty: to.y, suck: true,
+        life, maxLife: life,
+        size: 1.5 + Math.random() * 2,
+      });
+    }
   }
 }
 
@@ -1789,10 +1959,29 @@ function spawnCoin(x, y) {
 }
 
 function triggerShake(intensity, time) {
+  if (game.opts && game.opts.reduceMotion) intensity *= 0.3;
   if (game.shake.intensity * (game.shake.time || 0) < intensity * time) {
     game.shake.intensity = intensity;
     game.shake.time = time;
   }
+}
+
+/* Total board DPS estimate (player units only) — a quick "am I keeping pace?"
+ * gauge for the HUD. Approximate: damage × attacks/sec × stack. */
+function boardDps() {
+  let dps = 0;
+  for (const u of game.units) {
+    const d = UNITS[u.id];
+    dps += unitDamage(u) * d.aps * (u.stackCount || 1);
+  }
+  return dps;
+}
+
+function fmtNum(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return Math.round(n).toString();
 }
 
 /* === Rendering === */
@@ -3126,6 +3315,7 @@ function gameLoop(timestamp) {
     ui.gold.textContent = Math.floor(game.gold);
     ui.stones.textContent = game.stones;
     ui.hp.textContent = game.hp;
+    renderHudReadouts();
   }
   if (game.view === 'game') draw();
   requestAnimationFrame(gameLoop);
@@ -3287,10 +3477,39 @@ function onMouseUp(ev) {
   updateUI();
 }
 
+/* Manual ability cast (§1.4): fire the selected unit's ability early instead of
+ * waiting for the free full-charge auto-cast — a timing choice for landing a nuke
+ * on the boss. Needs at least half charge and an enemy in range. */
+function castSelected() {
+  const u = game.selectedUnit;
+  if (!u || game.gameOver) return;
+  const d = UNITS[u.id];
+  if (!d || !d.manaMax) return;
+  if ((u.mana || 0) < d.manaMax * 0.5) {
+    spawnPopup(cellCenter(u.col, u.row).x, cellCenter(u.col, u.row).y - 20, 'Not charged', '#9aa3b2');
+    return;
+  }
+  const c = cellCenter(u.col, u.row);
+  const rangePx = d.range * TILE;
+  let target = null, best = Infinity;
+  for (const e of game.enemies) {
+    if (e.dead || e.escaped) continue;
+    const dist = Math.hypot(e.x - c.x, e.y - c.y);
+    if (dist <= rangePx && dist < best) { best = dist; target = e; }
+  }
+  if (!target) {
+    spawnPopup(c.x, c.y - 20, 'No target', '#9aa3b2');
+    return;
+  }
+  u.mana = 0;
+  triggerAbility(u, target, c);
+}
+
 /* === UI === */
 function toggleSpeed() {
   game.speed = game.speed === 1 ? 2 : game.speed === 2 ? 3 : 1;
   ui.speedBtn.textContent = `${game.speed}×`;
+  sfx.play('click');
 }
 
 function setupUI() {
@@ -3403,6 +3622,29 @@ function setupUI() {
   });
   window.addEventListener('touchcancel', onMouseUp);
 
+  // HUD readouts & telegraph
+  ui.dpsDisplay     = document.getElementById('dps-display');
+  ui.econReadout    = document.getElementById('econ-readout');
+  ui.golemTelegraph = document.getElementById('golem-telegraph');
+
+  // Settings sheet
+  ui.settingsBtn    = document.getElementById('settings-btn');
+  ui.settingsPopup  = document.getElementById('settings-popup');
+  ui.settingsClose  = document.getElementById('settings-close');
+  ui.optSound       = document.getElementById('opt-sound');
+  ui.optReduceMotion= document.getElementById('opt-reduce-motion');
+  ui.optColorblind  = document.getElementById('opt-colorblind');
+  const toggleSettings = () => {
+    const open = !ui.settingsPopup.classList.contains('open');
+    ui.settingsPopup.classList.toggle('open', open);
+    ui.settingsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  ui.settingsBtn.addEventListener('click', toggleSettings);
+  ui.settingsClose.addEventListener('click', () => { ui.settingsPopup.classList.remove('open'); ui.settingsBtn.setAttribute('aria-expanded', 'false'); });
+  ui.optSound.addEventListener('change', (e) => { game.opts.sound = e.target.checked; if (e.target.checked) sfx.play('click'); saveProgress(); });
+  ui.optReduceMotion.addEventListener('change', (e) => { game.opts.reduceMotion = e.target.checked; applyOpts(); saveProgress(); });
+  ui.optColorblind.addEventListener('change', (e) => { game.opts.colorblind = e.target.checked; applyOpts(); saveProgress(); });
+
   // Keyboard shortcuts
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -3411,6 +3653,7 @@ function setupUI() {
     else if (e.key === 'l' || e.key === 'L') rouletteLegendary();
     else if (e.key === 'm' || e.key === 'M') mergeSelected();
     else if (e.key === 'x' || e.key === 'X') sellSelected();
+    else if (e.key === 'c' || e.key === 'C') castSelected();
     else if (e.key === '1' || e.key === '2' || e.key === '3') {
       game.speed = parseInt(e.key, 10);
       ui.speedBtn.textContent = `${game.speed}×`;
@@ -3439,7 +3682,29 @@ function updateUI() {
   ui.upgEpic.disabled     = game.gold < upgradeCostFor('Epic')   || game.gameOver;
   ui.upgMythic.disabled   = game.gold < upgradeCostFor('Mythic') || game.gameOver;
   if (ui.artifactsPopup && ui.artifactsPopup.classList.contains('open')) renderRecipeGuide();
+  renderHudReadouts();
   renderUnitInfo();
+}
+
+/* Live HUD projections (§4.2/§5.1): board DPS, Safe Box next-wave interest,
+ * Money Gun ATK multiplier, and the incoming-golem telegraph. */
+function renderHudReadouts() {
+  if (ui.dpsDisplay) ui.dpsDisplay.textContent = fmtNum(boardDps());
+  if (ui.econReadout) {
+    const sbNext = ARTIFACTS.sb.payoutAt(game.artifacts.sb || 0, game.gold);
+    const mgMult = ARTIFACTS.mg.multAt(game.artifacts.mg || 0, game.gold);
+    const parts = [`🏦 +${sbNext}g/wave`, `💸 ×${mgMult.toFixed(2)}`, `🪙 next ${game.summonCost}g`];
+    ui.econReadout.textContent = parts.join('   ');
+  }
+  if (ui.golemTelegraph) {
+    if (!game.golem.active && game.golem.cooldown > 0 && !game.gameOver) {
+      const arch = ENEMY_ARCHETYPES[(game.golem.kills || 0) % ENEMY_ARCHETYPES.length];
+      ui.golemTelegraph.hidden = false;
+      ui.golemTelegraph.textContent = `${arch.glyph} ${arch.name} Golem in ${Math.ceil(game.golem.cooldown)}s · resists ${immuneLabel(arch.immune)}`;
+    } else {
+      ui.golemTelegraph.hidden = true;
+    }
+  }
 }
 
 function renderUnitInfo() {
@@ -3501,6 +3766,7 @@ function renderUnitInfo() {
       <div class="meta">
         <div class="name">${d.name}</div>
         <div class="rarity" style="color: ${RARITY_COLORS[d.rarity]}">${d.rarity}${fam ? ` · <span style="color:${fam.color}">${fam.name}</span>` : ''}</div>
+        <div class="role-tag">${roleFor(d)}</div>
       </div>
     </div>
     <table>
@@ -3892,6 +4158,7 @@ function endGame(victory) {
   game.gameOver = true;
   game.runActive = false;
   game.victory = victory;
+  sfx.play(victory ? 'victory' : 'defeat');
   closeAllPopups();
   if (game.selectedUnit) { game.selectedUnit = null; renderUnitInfo(); }
   ui.gameOver.hidden = false;
@@ -4108,7 +4375,9 @@ function init() {
     if (saved.coop)         game.coop.enabled = !!saved.coop.enabled;
     if (saved.gems !== undefined) game.gems = saved.gems;
     if (saved.tokens !== undefined) game.tokens = saved.tokens;
+    if (saved.opts) game.opts = Object.assign(game.opts, saved.opts);
   }
+  applyOpts();
   setMap(game.mapId);
   game.missions = makeMissions();
   renderMissions();

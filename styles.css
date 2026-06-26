@@ -698,11 +698,123 @@ main { display: block; }
   touch-action: none;
 }
 
+/* Settings icon button in the topbar */
+.icon-btn {
+  flex: 0 0 auto;
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  display: grid; place-items: center;
+}
+.icon-btn:hover { background: rgba(255,255,255,0.07); }
+
+/* Role tag in the inspector */
+.role-tag {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+}
+
+/* Settings sheet rows */
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--panel-border);
+  cursor: pointer;
+}
+.setting-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.setting-title { font-weight: 600; font-size: 14px; }
+.setting-sub { color: var(--text-dim); font-size: 12px; }
+.settings-subhead { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+.setting-row input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.opt-switch {
+  flex: 0 0 auto;
+  position: relative;
+  width: 40px; height: 22px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  transition: background 0.15s ease;
+}
+.opt-switch::after {
+  content: '';
+  position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.setting-row input:checked + .opt-switch { background: var(--accent); }
+.setting-row input:checked + .opt-switch::after { transform: translateX(18px); }
+.setting-row input:focus-visible + .opt-switch { box-shadow: 0 0 0 2px var(--accent); }
+
 #board-hud {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
+
+/* Live economy readout (top-left overlay) and golem telegraph (top-right) */
+#econ-readout {
+  position: absolute;
+  top: 6px; left: 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #cfe3ff;
+  background: rgba(0,0,0,0.42);
+  padding: 3px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+#golem-telegraph {
+  position: absolute;
+  top: 6px; right: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffd9a8;
+  background: rgba(60, 30, 10, 0.5);
+  border: 1px solid rgba(255, 160, 80, 0.4);
+  padding: 3px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+/* Reduce-motion: kill non-essential CSS animations/transitions */
+body.reduce-motion #wave-banner.show { animation: none; }
+body.reduce-motion * { animation-duration: 0.001s !important; transition-duration: 0.05s !important; }
+
+/* Colorblind rarity cues: add a letter badge next to each rarity dot/chip */
+body.cb .dot.common::after,
+body.cb .dot.rare::after,
+body.cb .dot.epic::after,
+body.cb .dot.legendary::after,
+body.cb .dot.mythic::after,
+body.cb .dot.immortal::after {
+  margin-left: 13px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-dim);
+}
+body.cb .dot.common::after    { content: 'C'; }
+body.cb .dot.rare::after      { content: 'R'; }
+body.cb .dot.epic::after      { content: 'E'; }
+body.cb .dot.legendary::after { content: 'L'; }
+body.cb .dot.mythic::after    { content: 'M'; }
+body.cb .dot.immortal::after  { content: 'I'; }
+body.cb .role-tag::before { content: '◆ '; }
 
 #wave-banner {
   position: absolute;
