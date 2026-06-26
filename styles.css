@@ -778,30 +778,36 @@ main { display: block; }
   pointer-events: none;
 }
 
-/* Live economy readout (top-left overlay) and golem telegraph (top-right) */
+/* Informational HUD strip: sits in flow between the action buttons and the
+ * play area so its readouts never overlap the wave banner/countdown drawn on
+ * the board. Wraps gracefully on narrow screens. */
+#hud-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 6px 0 0;
+}
 #econ-readout {
-  position: absolute;
-  top: 6px; left: 8px;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: #cfe3ff;
-  background: rgba(0,0,0,0.42);
-  padding: 3px 8px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  padding: 4px 9px;
   border-radius: 8px;
-  white-space: nowrap;
 }
 #golem-telegraph {
-  position: absolute;
-  top: 6px; right: 8px;
   font-size: 11px;
   font-weight: 600;
   color: #ffd9a8;
   background: rgba(60, 30, 10, 0.5);
   border: 1px solid rgba(255, 160, 80, 0.4);
-  padding: 3px 8px;
+  padding: 4px 9px;
   border-radius: 8px;
-  white-space: nowrap;
 }
+#golem-telegraph[hidden] { display: none; }
 
 /* Reduce-motion: kill non-essential CSS animations/transitions */
 body.reduce-motion #wave-banner.show { animation: none; }
