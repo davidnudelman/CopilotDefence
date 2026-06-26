@@ -2214,6 +2214,37 @@ function _flame(ctx, x, y, r, t) {
   ctx.restore();
 }
 
+/* === Unit sprite icons for the HTML UI ===
+ * Render the same procedural character used on the board into a small offscreen
+ * canvas and cache it as a data URL, so the inspector and recipe lists show the
+ * real unit art instead of an emoji. Cached per id+size+dpr; drawn at a fixed
+ * time so the pose is stable (Immortals included). */
+const UNIT_ICON_CACHE = {};
+function unitIconDataURL(unitId, sizePx = 44) {
+  if (!UNITS[unitId]) return null;
+  const dpr = window.devicePixelRatio || 1;
+  const key = `${unitId}|${sizePx}|${dpr}`;
+  if (UNIT_ICON_CACHE[key]) return UNIT_ICON_CACHE[key];
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(sizePx * dpr);
+  canvas.height = Math.round(sizePx * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  // Fixed t=0 → stable, non-animated pose; center nudged down so feet/gear fit.
+  drawCharacter(ctx, unitId, sizePx / 2, sizePx * 0.56, sizePx * 0.62, 0, 0, 1);
+  const url = canvas.toDataURL('image/png');
+  UNIT_ICON_CACHE[key] = url;
+  return url;
+}
+/* Inline <img> for a unit, falling back to the emoji glyph if rendering fails. */
+function unitIconImg(unitId, cls = 'unit-icon', sizePx = 44) {
+  const d = UNITS[unitId];
+  if (!d) return '';
+  const url = unitIconDataURL(unitId, sizePx);
+  if (!url) return d.glyph;
+  return `<img class="${cls}" src="${url}" alt="${d.name}" draggable="false">`;
+}
+
 function drawCharacter(ctx, unitId, x, y, size, t, flash, stackCount) {
   const d = UNITS[unitId];
   const fam = FAMILIES[d.family];
@@ -3627,8 +3658,9 @@ function setupUI() {
   ui.dungeonBtn     = document.getElementById('dungeon-btn');
   ui.menuBtn        = document.getElementById('menu-btn');
   ui.endMenu        = document.getElementById('end-menu');
-  ui.inspectorSheet = document.getElementById('inspector-sheet');
+  ui.inspectorPanel = document.getElementById('inspector-panel');
   ui.inspectorClose = document.getElementById('inspector-close');
+  ui.logPanel       = document.getElementById('log-panel');
   ui.sheetBackdrop  = document.getElementById('sheet-backdrop');
   ui.logList      = document.getElementById('log-list');
   ui.gameOver     = document.getElementById('game-over');
@@ -3783,21 +3815,22 @@ function renderUnitInfo() {
   if (!u) {
     ui.unitInfo.innerHTML = '';
     ui.unitActions.hidden = true;
-    if (ui.inspectorSheet) {
-      ui.inspectorSheet.classList.remove('open');
-      updateBackdrop();
-    }
+    // Hide the docked inspector panel and restore the log beneath the board.
+    if (ui.inspectorPanel) ui.inspectorPanel.hidden = true;
+    if (ui.logPanel) ui.logPanel.hidden = false;
     return;
   }
-  if (ui.inspectorSheet && !ui.inspectorSheet.classList.contains('open')) {
-    // Opening the inspector closes any other open sheet.
+  if (ui.inspectorPanel && ui.inspectorPanel.hidden) {
+    // Opening the inspector closes any open sheet and takes over the log area
+    // below the board (the board stays fully visible & draggable).
     for (const k of ['missions', 'dungeon', 'artifacts']) {
       ui[`${k}Popup`].classList.remove('open');
       ui[`${k}Toggle`]?.classList.remove('active');
       ui[`${k}Toggle`]?.setAttribute('aria-expanded', 'false');
     }
-    ui.inspectorSheet.classList.add('open');
     updateBackdrop();
+    ui.inspectorPanel.hidden = false;
+    if (ui.logPanel) ui.logPanel.hidden = true;
   }
   const d = UNITS[u.id];
   const dmg = unitDamage(u);
@@ -3823,7 +3856,7 @@ function renderUnitInfo() {
         const have = game.units.filter(x => x.id === ingId).length;
         const enough = have >= req;
         const qty = req > 1 ? ` ×${req}` : '';
-        return `<span style="color: ${enough ? '#fff' : '#888'}; text-decoration: ${enough ? 'none' : 'line-through'}">${ing.glyph} ${ing.name}${qty} <span class="dim">(${have}/${req})</span></span>`;
+        return `<span class="ing-line" style="color: ${enough ? '#fff' : '#888'}; text-decoration: ${enough ? 'none' : 'line-through'}">${unitIconImg(ingId, 'ing-icon', 26)} ${ing.name}${qty} <span class="dim">(${have}/${req})</span></span>`;
       }).join(' + ');
       const enoughStones = game.stones >= r.stones;
       recipeHtml = `<div class="recipe-hint"><b>Levels up to ${UNITS[r.result].name}:</b><br>${ings} + <span style="text-decoration:${enoughStones ? 'none' : 'line-through'}">${r.stones}🔷</span></div>`;
@@ -3847,7 +3880,7 @@ function renderUnitInfo() {
 
   ui.unitInfo.innerHTML = `
     <div class="unit-card">
-      <div class="glyph" style="border-color: ${RARITY_COLORS[d.rarity]}">${d.glyph}</div>
+      <div class="glyph" style="border-color: ${RARITY_COLORS[d.rarity]}">${unitIconImg(d.id, 'unit-icon', 44)}</div>
       <div class="meta">
         <div class="name">${d.name}</div>
         <div class="rarity" style="color: ${RARITY_COLORS[d.rarity]}">${d.rarity}${fam ? ` · <span style="color:${fam.color}">${fam.name}</span>` : ''}</div>
@@ -3943,7 +3976,7 @@ function renderFamilies() {
       .filter(u => u.family === f.id && u.rarity !== 'Immortal')
       .sort((a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity));
     const chips = ladder.map(u =>
-      `<span class="fam-chip" style="border-color:${RARITY_COLORS[u.rarity]}" title="${u.name} (${u.rarity})">${u.glyph}</span>`
+      `<span class="fam-chip" style="border-color:${RARITY_COLORS[u.rarity]}" title="${u.name} (${u.rarity})">${unitIconImg(u.id, 'fam-icon', 28)}</span>`
     ).join('');
     return `<li class="family-row">
       <div class="family-head">
@@ -3961,14 +3994,14 @@ function renderRecipes() {
   const chip = (id) => {
     const u = UNITS[id];
     if (!u) return `<span class="recipe-chip">?</span>`;
-    return `<span class="recipe-chip" style="border-color:${RARITY_COLORS[u.rarity]}" title="${u.name} (${u.rarity})">${u.glyph}</span>`;
+    return `<span class="recipe-chip" style="border-color:${RARITY_COLORS[u.rarity]}" title="${u.name} (${u.rarity})">${unitIconImg(u.id, 'recipe-icon', 26)}</span>`;
   };
   const section = (title, recipes) =>
     Object.values(recipes).map(r => {
       const res = UNITS[r.result];
       const ings = r.ingredients.map(chip).join('<span class="recipe-plus">+</span>');
       return `<li class="recipe-row">
-        <span class="recipe-result" style="color:${RARITY_COLORS[res.rarity]}">${res.glyph} ${res.name}</span>
+        <span class="recipe-result" style="color:${RARITY_COLORS[res.rarity]}">${unitIconImg(res.id, 'recipe-icon', 26)} ${res.name}</span>
         <span class="recipe-formula">${ings}<span class="recipe-plus">+</span><span class="recipe-stones">${r.stones}🔷</span></span>
       </li>`;
     }).join('');
@@ -3987,7 +4020,7 @@ function renderDungeon() {
     : `<ul class="dungeon-units">${game.dungeon.units.map((u, i) => {
         const d = UNITS[u.id];
         return `<li>
-          <span class="glyph" style="border-color:${RARITY_COLORS[d.rarity]}">${d.glyph}</span>
+          <span class="glyph" style="border-color:${RARITY_COLORS[d.rarity]}">${unitIconImg(d.id, 'dungeon-icon', 30)}</span>
           <span class="name">${d.name}</span>
           <span class="dps">${dungeonDps(u).toFixed(1)} dps</span>
           <button data-recall="${i}" class="recall-btn" type="button">Recall</button>
@@ -4083,7 +4116,7 @@ function renderRecipeGuide(targetId = 'artifacts-body') {
       const ok = have >= req;
       if (!ok) haveAll = false;
       return `<span class="rg-chip ${ok ? 'ok' : ''}" style="border-color:${RARITY_COLORS[ing.rarity]}" title="${ing.name} (${ing.rarity})">
-          ${ing.glyph}${req > 1 ? `<span class="rg-x">×${req}</span>` : ''}
+          ${unitIconImg(ingId, 'rg-icon', 30)}${req > 1 ? `<span class="rg-x">×${req}</span>` : ''}
           <span class="rg-have">${have}/${req}</span>
         </span>`;
     }).join('<span class="recipe-plus">+</span>');
@@ -4093,7 +4126,7 @@ function renderRecipeGuide(targetId = 'artifacts-body') {
       ? '<span class="rg-status ready">Ready ✓</span>'
       : `<span class="rg-status">${stonesOk ? '' : 'Need stones'}</span>`;
     return `<li class="rg-row ${ready ? 'is-ready' : ''}">
-        <span class="rg-result" style="color:${RARITY_COLORS[res.rarity]}">${res.glyph} ${res.name}</span>
+        <span class="rg-result" style="color:${RARITY_COLORS[res.rarity]}">${unitIconImg(res.id, 'rg-icon', 30)} ${res.name}</span>
         <span class="rg-formula">${chips}<span class="recipe-plus">+</span><span class="rg-stones ${stonesOk ? 'ok' : ''}">${r.stones}🔷</span></span>
         ${badge}
       </li>`;

@@ -1038,6 +1038,22 @@ body.cb .role-tag::before { content: '◆ '; }
   background: rgba(255,255,255,0.05);
   border: 2px solid var(--common);
 }
+
+/* Procedural unit sprites rendered into the emoji-glyph slots. */
+#unit-info-body .glyph .unit-icon,
+.fam-chip .fam-icon,
+.recipe-chip .recipe-icon,
+.rg-chip .rg-icon,
+.dungeon-units .glyph .dungeon-icon {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.ing-icon { width: 20px; height: 20px; vertical-align: middle; object-fit: contain; }
+.rg-result .rg-icon,
+.recipe-result .recipe-icon {
+  width: 24px; height: 24px; vertical-align: middle; object-fit: contain; margin-right: 2px;
+}
 #unit-info-body .meta { line-height: 1.3; }
 #unit-info-body .meta .name { font-weight: 700; }
 #unit-info-body .meta .rarity { font-size: 12px; }
@@ -1299,6 +1315,50 @@ body.cb .role-tag::before { content: '◆ '; }
 #log-list li.epic { color: var(--epic); }
 #log-list li.legendary { color: var(--legendary); }
 #log-list li.mythic { color: var(--mythic); }
+
+/* Inspector docked below the board — shares the bottom slot with the log and
+ * never overlays the canvas, so units stay draggable while one is selected. */
+#inspector-panel {
+  background: var(--bg-2);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  max-height: min(44vh, 380px);
+  overflow: hidden;
+}
+#inspector-panel[hidden] { display: none; }
+.inspector-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.inspector-head h3 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+.inspector-head #inspector-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 10px;
+  border-radius: 8px;
+}
+.inspector-head #inspector-close:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+.inspector-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 10px 12px 12px;
+}
 
 /* Responsive */
 @media (max-width: 980px) {
