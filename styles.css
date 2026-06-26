@@ -68,6 +68,14 @@ html, body {
   gap: 14px;
 }
 
+/* Image-based crest logo overrides the gold monogram square. */
+.logo-img {
+  background: none !important;
+  border-radius: 12px;
+  object-fit: contain;
+  display: block;
+}
+
 .welcome-header .logo {
   width: 56px;
   height: 56px;
