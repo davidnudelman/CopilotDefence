@@ -129,6 +129,7 @@ const FAMILIES = {
   sniper:  { id: 'sniper',  name: 'Sniper',  color: '#a8e055', desc: 'Long range and a rapid trigger finger.' },
   bruiser: { id: 'bruiser', name: 'Bruiser', color: '#ff7e7e', desc: 'Short range, devastating single-target.' },
   arcane:  { id: 'arcane',  name: 'Arcane',  color: '#b06bf0', desc: 'Charges mana and accelerates the board.' },
+  tactics: { id: 'tactics', name: 'Tactics', color: '#d8b24a', desc: 'Utility crew: loots gold, stuns, and strips enemy armor.' },
 };
 
 const UNITS = {
@@ -167,6 +168,13 @@ const UNITS = {
   arc_l:   { id: 'arc_l',   family: 'arcane', name: 'Archmage',     rarity: 'Legendary', dmg: 26,  range: 2.6, aps: 1.0, type: 'magic', glyph: '🔮' },
   arc_m:   { id: 'arc_m',   family: 'arcane', name: 'Storm Archon', rarity: 'Mythic',    dmg: 45,  range: 2.8, aps: 1.0, type: 'magic',    manaMax: 12, ability: 'chainLightning', glyph: '⚡' },
 
+  // ── Tactics family ─ utility: gold farm (loot), stun, and DEF-down
+  tac_c:   { id: 'tac_c',   family: 'tactics',name: 'Cutpurse',     rarity: 'Common',    dmg: 4,  range: 1.6, aps: 1.0, type: 'physical', loot: 1, glyph: '💰' },
+  tac_r:   { id: 'tac_r',   family: 'tactics',name: 'Bandit',       rarity: 'Rare',      dmg: 7,  range: 1.8, aps: 1.0, type: 'physical', loot: 2, glyph: '🦝' },
+  tac_e:   { id: 'tac_e',   family: 'tactics',name: 'Saboteur',     rarity: 'Epic',      dmg: 12, range: 2.0, aps: 1.0, type: 'physical', loot: 2, defDown: { amount: 0.20, duration: 3.0 }, glyph: '🕵️' },
+  tac_l:   { id: 'tac_l',   family: 'tactics',name: 'Shock Trooper',rarity: 'Legendary', dmg: 24, range: 2.2, aps: 1.1, type: 'physical', defDown: { amount: 0.30, duration: 3.5 }, stun: { chance: 0.30, duration: 0.8 }, glyph: '🪤' },
+  tac_m:   { id: 'tac_m',   family: 'tactics',name: 'Mastermind',   rarity: 'Mythic',    dmg: 44, range: 2.6, aps: 1.1, type: 'physical', loot: 3, defDown: { amount: 0.40, duration: 4.0 }, stun: { chance: 0.35, duration: 1.0 }, manaMax: 8, ability: 'overload', glyph: '🎩' },
+
   // ── Immortals (merge-only)
   haley:   { id: 'haley',   family: 'bruiser',name: 'Immortal Haley',rarity: 'Immortal',  dmg: 220, range: 1.6, aps: 0.8, type: 'physical', variable: true, manaMax: 5, ability: 'crushingBlow', glyph: '🦸' },
   ato:     { id: 'ato',     family: 'arcane', name: 'Immortal Ato', rarity: 'Immortal',  dmg: 140, range: 3.0, aps: 1.0, type: 'magic',    variable: true, aoe: 1.2, manaMax: 10, ability: 'starfall', glyph: '🦋' },
@@ -175,29 +183,29 @@ const UNITS = {
 };
 
 const POOLS = {
-  Common:    ['frost_c', 'burn_c', 'sniper_c', 'bruis_c', 'arc_c'],
-  Rare:      ['frost_r', 'burn_r', 'sniper_r', 'bruis_r', 'arc_r'],
-  Epic:      ['frost_e', 'burn_e', 'sniper_e', 'bruis_e', 'arc_e'],
-  Legendary: ['frost_l', 'burn_l', 'sniper_l', 'bruis_l', 'arc_l'],
-  Mythic:    ['frost_m', 'burn_m', 'sniper_m', 'bruis_m', 'arc_m'],
+  Common:    ['frost_c', 'burn_c', 'sniper_c', 'bruis_c', 'arc_c', 'tac_c'],
+  Rare:      ['frost_r', 'burn_r', 'sniper_r', 'bruis_r', 'arc_r', 'tac_r'],
+  Epic:      ['frost_e', 'burn_e', 'sniper_e', 'bruis_e', 'arc_e', 'tac_e'],
+  Legendary: ['frost_l', 'burn_l', 'sniper_l', 'bruis_l', 'arc_l', 'tac_l'],
+  Mythic:    ['frost_m', 'burn_m', 'sniper_m', 'bruis_m', 'arc_m', 'tac_m'],
   Immortal:  ['haley', 'ato', 'angel', 'vulcan'],
 };
 
-const FAMILY_IDS = ['frost', 'burn', 'sniper', 'bruiser', 'arcane'];
+const FAMILY_IDS = ['frost', 'burn', 'sniper', 'bruiser', 'arcane', 'tactics'];
 
 /* Sell values for the premium high rarities (refunded in stones).
- * Common/Rare are computed dynamically from the current summon cost, and
- * Immortals cannot be sold at all (see sellValue). */
+ * Common/Rare are computed dynamically from the current summon cost.
+ * Immortals can be salvaged for partial stones (§2.4) so a bad-luck build
+ * isn't permanent dead weight. */
 const SELL_VALUES = {
   Epic:      { stones: 1 },
   Legendary: { stones: 2 },
   Mythic:    { stones: 5 },
+  Immortal:  { stones: 8 },
 };
 
-/* What selling a unit (and its stack) yields, with a display label.
- * Returns null when the unit cannot be sold (Immortals). */
+/* What selling a unit (and its stack) yields, with a display label. */
 function sellValue(d, stackCount = 1) {
-  if (d.rarity === 'Immortal') return null;
   const mult = stackCount > 1 ? stackCount : 1;
   if (d.rarity === 'Common' || d.rarity === 'Rare') {
     // Scale with the live summon cost: Common 30%, Rare 65%.
@@ -216,10 +224,10 @@ function sellValue(d, stackCount = 1) {
  * wins. Used in the inspector and as a board chip. */
 function roleFor(d) {
   if (!d) return '';
-  if (d.loot)                          return 'Gold Farm';
   if (d.stun)                          return 'Stun';
   if (d.defDown)                       return 'DEF-Down';
   if (d.manaAura)                      return 'Support';
+  if (d.loot)                          return 'Gold Farm';
   if (d.percentHP)                     return '% HP';
   if (d.slow && d.freezeChance)        return 'Freeze CC';
   if (d.slow)                          return 'Slow CC';
@@ -280,6 +288,7 @@ const ABILITY_DESCRIPTIONS = {
   chainLightning: 'Every full mana: chain lightning hits up to 6 enemies.',
   crushingBlow:   'Every full mana: huge hit + 6% of target max HP.',
   starfall:       'Every full mana: starfall over all enemies in range.',
+  overload:       'Every full mana: AoE stuns and strips armor from all enemies in range.',
 };
 
 /* === Family signature specials ===
@@ -300,6 +309,8 @@ const SIGNATURE = {
              desc: () => 'Devastating single hit + bonus % max HP and a brief stun.' },
   arcane:  { name: 'Mana Surge',      glyph: '✨', color: '#b06bf0',
              desc: () => 'Pours mana into nearby charging allies and zaps the target.' },
+  tactics: { name: 'Sticky Trap',     glyph: '🪤', color: '#d8b24a',
+             desc: () => 'Snares nearby enemies — slows them and strips their armor.' },
 };
 
 /* Roulette costs/odds — premium tiers above Legendary require merges. */
@@ -317,6 +328,7 @@ const MERGE_RECIPES = {
   sniper_c: 'sniper_r', sniper_r: 'sniper_e', sniper_e: 'sniper_l',
   bruis_c:  'bruis_r',  bruis_r:  'bruis_e',  bruis_e:  'bruis_l',
   arc_c:    'arc_r',    arc_r:    'arc_e',    arc_e:    'arc_l',
+  tac_c:    'tac_r',    tac_r:    'tac_e',    tac_e:    'tac_l',
 };
 
 /* Mythic Recipes — each Legendary levels up into its own family's Mythic.
@@ -329,6 +341,7 @@ const MYTHIC_RECIPES = {
   sniper_m: { ingredients: ['sniper_l', 'sniper_l', 'sniper_l'], stones: 6, result: 'sniper_m' },
   bruis_m:  { ingredients: ['bruis_l',  'bruis_l',  'bruis_l'],  stones: 6, result: 'bruis_m' },
   arc_m:    { ingredients: ['arc_l',    'arc_l',    'arc_l'],    stones: 6, result: 'arc_m' },
+  tac_m:    { ingredients: ['tac_l',    'tac_l',    'tac_l'],    stones: 6, result: 'tac_m' },
 };
 
 /* Immortal Recipes */
@@ -1290,6 +1303,25 @@ function triggerAbility(u, target, c) {
       log(`🦋 ${d.name} calls down Starfall!`, 'mythic');
       break;
     }
+    case 'overload': {
+      const r = (d.range + 0.4) * TILE;
+      const stunMult = (DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal).stunMult;
+      const ddAmt = d.defDown ? d.defDown.amount : 0.4;
+      spawnRing(c.x, c.y, r, '#ffd23a', 0.7, 4);
+      spawnParticleBurst(c.x, c.y, '#ffd23a', 20);
+      triggerShake(4, 0.2);
+      for (const e of game.enemies) {
+        if (e.dead || e.escaped) continue;
+        if (Math.hypot(e.x - c.x, e.y - c.y) > r) continue;
+        damageEnemy(e, unitDamage(u) * 1.2, 'physical', u);
+        if (e.dead) continue;
+        applyStun(e, 1.0 * stunMult);
+        e.defDownAmount = Math.max(e.defDownAmount, ddAmt);
+        e.defDownTimer = Math.max(e.defDownTimer, 4.0);
+      }
+      log(`🎩 ${d.name} triggers an Overload!`, 'mythic');
+      break;
+    }
   }
   unlock('ability');
 }
@@ -1388,6 +1420,24 @@ function triggerSignature(u, target, c) {
       spawnRing(c.x, c.y, r, sig.color, 0.6, 3);
       if (target && !target.dead) damageEnemy(target, unitDamage(u) * 1.2, 'magic', u);
       log(`✨ ${d.name} channels a Mana Surge${buffed ? ` (+${buffed})` : ''}!`, rarityCls);
+      break;
+    }
+    case 'tactics': {
+      // Snare nearby enemies: slow them and strip armor (DEF-down).
+      const r = d.range * 0.8 * TILE;
+      const ddAmt = d.defDown ? d.defDown.amount : 0.2;
+      spawnRing(c.x, c.y, r, sig.color, 0.6, 3);
+      spawnParticleBurst(c.x, c.y, sig.color, 12);
+      for (const e of game.enemies) {
+        if (e.dead || e.escaped) continue;
+        if (Math.hypot(e.x - c.x, e.y - c.y) > r) continue;
+        damageEnemy(e, unitDamage(u) * 0.9, 'physical', u);
+        if (e.dead) continue;
+        applySlow(e, 0.45, 1.5);
+        e.defDownAmount = Math.max(e.defDownAmount, ddAmt);
+        e.defDownTimer = Math.max(e.defDownTimer, 3.0);
+      }
+      log(`🪤 ${d.name} springs a Sticky Trap!`, rarityCls);
       break;
     }
   }
@@ -1496,12 +1546,19 @@ function rouletteEpic() {
   updateUI();
 }
 
+// Legendary roulette pity (§2.4): after this many consecutive misses the next
+// spin is a guaranteed Legendary, so a long run always trends toward its goal.
+const LEGENDARY_PITY_THRESHOLD = 3;
+
 function rouletteLegendary() {
   if (game.stones < LEGENDARY_ROULETTE_COST) return;
   const cell = findEmptyCell();
   if (!cell) { log('Board is full', 'danger'); return; }
   game.stones -= LEGENDARY_ROULETTE_COST;
-  if (Math.random() < LEGENDARY_ROULETTE_CHANCE) {
+  const pityHit = (game.legendaryMisses || 0) >= LEGENDARY_PITY_THRESHOLD;
+  if (pityHit || Math.random() < LEGENDARY_ROULETTE_CHANCE) {
+    if (pityHit) log('Pity reached — guaranteed Legendary!', 'legendary');
+    game.legendaryMisses = 0;
     const id = POOLS.Legendary[Math.floor(Math.random() * POOLS.Legendary.length)];
     spawnUnit(id, cell[0], cell[1]);
     triggerShake(4, 0.25);
@@ -1510,6 +1567,7 @@ function rouletteLegendary() {
     spawnParticleBurst(c.x, c.y, RARITY_COLORS.Legendary, 18);
     sfx.play('legendary');
   } else {
+    game.legendaryMisses = (game.legendaryMisses || 0) + 1;
     const id = POOLS.Epic[Math.floor(Math.random() * POOLS.Epic.length)];
     spawnUnit(id, cell[0], cell[1]);
     log('Roulette missed — landed on an Epic', 'danger');
@@ -2981,6 +3039,19 @@ function drawUnitAt(ctx, u, x, y, ghost = false) {
   }[d.rarity] || 1.0;
 
   drawCharacter(ctx, u.id, x, y, 40 * rarityScale, t + (u.col * 0.1 + u.row * 0.1), u.flash, u.stackCount);
+  // Colorblind cue (§6.5): a rarity initial on the pedestal so tier reads
+  // without relying on the base colour alone.
+  if (game.opts && game.opts.colorblind) {
+    const letter = (d.rarity[0] === 'I' && d.rarity === 'Immortal') ? 'I' : d.rarity[0];
+    ctx.save();
+    ctx.font = 'bold 9px system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillText(letter, x, baseY + 0.5);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(letter, x, baseY);
+    ctx.restore();
+  }
   // mana ring (arc) for units with an ability — full circle = ready.
   if (d.manaMax) {
     const frac = Math.min(1, (u.mana || 0) / d.manaMax);
@@ -3760,6 +3831,20 @@ function renderUnitInfo() {
     }
   }
 
+  // Hold-vs-merge guidance (§5.5): if this unit is an ingredient for an Immortal
+  // recipe you're already building toward, warn before merging it away.
+  let holdHtml = '';
+  for (const rid in IMMORTAL_RECIPES) {
+    const r = IMMORTAL_RECIPES[rid];
+    if (!r.ingredients.includes(u.id)) continue;
+    const others = r.ingredients.filter(i => i !== u.id);
+    const haveOther = others.some(i => game.units.some(x => x.id === i));
+    if (haveOther) {
+      holdHtml = `<div class="hold-hint">⚠ Hold — needed for the <b>${UNITS[r.result].name}</b> recipe (you already hold other ingredients).</div>`;
+      break;
+    }
+  }
+
   ui.unitInfo.innerHTML = `
     <div class="unit-card">
       <div class="glyph" style="border-color: ${RARITY_COLORS[d.rarity]}">${d.glyph}</div>
@@ -3781,12 +3866,14 @@ function renderUnitInfo() {
       ${d.burn         ? `<tr><td class="k">Burn DoT</td><td class="v">${d.burn.dps} dps / ${d.burn.duration}s</td></tr>` : ''}
       ${d.percentHP    ? `<tr><td class="k">% max HP</td><td class="v">+${(d.percentHP*100).toFixed(1)}%</td></tr>` : ''}
       ${d.defDown      ? `<tr><td class="k">DEF down</td><td class="v">-${(d.defDown.amount*100).toFixed(0)}% / ${d.defDown.duration}s</td></tr>` : ''}
+      ${d.loot         ? `<tr><td class="k">Loot</td><td class="v">+${d.loot}g per hit</td></tr>` : ''}
       ${d.manaAura     ? `<tr><td class="k">Mana aura</td><td class="v">+1 mana / ally attack within ${d.manaAura} tiles</td></tr>` : ''}
       ${d.manaMax      ? `<tr><td class="k">Mana</td><td class="v">${u.mana || 0} / ${d.manaMax}</td></tr>` : ''}
       ${sigText        ? `<tr><td class="k">Special</td><td class="v">${sigText}</td></tr>` : ''}
       ${abilityText    ? `<tr><td class="k">Ability</td><td class="v">${abilityText}</td></tr>` : ''}
     </table>
     ${recipeHtml}
+    ${holdHtml}
   `;
   ui.unitActions.hidden = false;
   const sv = sellValue(d, u.stackCount);

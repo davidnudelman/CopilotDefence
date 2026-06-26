@@ -3,6 +3,18 @@
 A prioritized list of proposed improvements focused on **playability**: skill/combat balance,
 unit upgrades, economy, UI, look & feel, and user experience.
 
+> **Status:** The proposals below have now been implemented in `game.js`,
+> `index.html`, and `styles.css` (verified by a headless-Chromium boot test
+> running a full session with zero console errors). Highlights shipped:
+> golem-immunity softening + boss/golem telegraphs, Hell stun tuning, manual
+> ability cast, upgrade milestones, opening + Legendary pity, live DPS/economy
+> HUD readouts, role labels, hold-vs-merge warnings, a settings panel
+> (sound / reduced-motion / colorblind cues), WebAudio SFX, merge animation,
+> roulette celebrations, and a brand-new **Tactics** utility family (Cutpurse →
+> Bandit → Saboteur → Shock Trooper → Mastermind) delivering the gold-farm,
+> stun, and DEF-down roles. `§4.4` was reviewed and left as-is (artifact levels
+> are cross-run meta-progression, so the linear curve is intended).
+
 This document complements [`GAP_ANALYSIS_AND_SUGGESTIONS.md`](./GAP_ANALYSIS_AND_SUGGESTIONS.md).
 That doc tracks the gap between the current build and the README's long-term vision (co-op,
 sprites, modular refactor). **This one is narrower and more actionable**: it targets the
