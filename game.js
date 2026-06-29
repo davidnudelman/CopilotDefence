@@ -451,6 +451,8 @@ const ACHIEVEMENTS = [
   { id: 'hellRun',     title: 'Welcome to Hell',  desc: 'Reach wave 10 on Hell.' },
   { id: 'stoneHoard',  title: 'Stone Hoarder',    desc: 'Hold 30 Luck Stones at once.' },
   { id: 'dungeon5',    title: 'Tier 5 Crawler',   desc: 'Clear Dungeon Tier 5.' },
+  { id: 'dungeonDeep', title: 'Deep Delver',      desc: 'Reach Dungeon Tier 15.' },
+  { id: 'dungeonAbyss',title: 'Abyss Walker',     desc: 'Reach Dungeon Tier 25.' },
   { id: 'untouched',   title: 'Iron Codebase',    desc: 'Clear a wave with zero escapes.' },
 ];
 
@@ -557,12 +559,12 @@ const game = {
   victory: false,
   lastTime: 0,
   golem: { cooldown: GOLEM_COOLDOWN, active: false, kills: 0 },
-  dungeon: { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1 }, kills: 0 },
+  dungeon: { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1, modifiers: [] }, kills: 0, dive: null, lootLog: [] },
   gems: 0,
   tokens: 0,
   artifacts: { sb: 0, mg: 0 },
   achievements: {},
-  stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, unitLevels: {}, endlessBest: 0 },
+  stats: { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, unitLevels: {}, endlessBest: 0, dungeonBest: 0 },
   difficulty: 'normal',
   mapId: 'wind',
   mode: 'campaign',
@@ -959,7 +961,8 @@ function damageEnemy(enemy, dmg, type, killer) {
 function onEnemyKilled(enemy, killer) {
   const rewardMult = (DIFFICULTIES[game.difficulty] || DIFFICULTIES.normal).reward;
   const cmLvl = game.artifacts.cm || 0;
-  const coinMult = (cmLvl > 0 && Math.random() < ARTIFACTS.cm.chanceAt(cmLvl)) ? 2 : 1;
+  let coinMult = (cmLvl > 0 && Math.random() < ARTIFACTS.cm.chanceAt(cmLvl)) ? 2 : 1;
+  if (game.dungeon.boardBuff && game.dungeon.boardBuff.type === 'gold') coinMult *= game.dungeon.boardBuff.mult;
   if (coinMult > 1) spawnPopup(enemy.x, enemy.y, '×2 GOLD!', '#ffd166');
 
   if (enemy.kind === 'normal') game.gold += (1 + Math.floor(game.wave * 0.15)) * rewardMult * coinMult;
@@ -1012,6 +1015,7 @@ function unitDamage(unit) {
 
   dmg *= ARTIFACTS.mg.multAt(game.artifacts.mg, game.gold);
   if (d.variable) dmg *= 0.5 + Math.random();
+  if (game.dungeon.boardBuff && game.dungeon.boardBuff.type === 'dmg') dmg *= game.dungeon.boardBuff.mult;
   return dmg;
 }
 
@@ -1771,11 +1775,81 @@ function updateGolem(dt) {
 }
 
 /* === Dungeon === */
+
+const DUNGEON_MODIFIERS = [
+  { id: 'armored',   label: 'Armored',    icon: '🛡️', desc: 'Takes 30% less damage',       apply: dps => dps * 0.7 },
+  { id: 'regen',     label: 'Regenerating',icon: '💚', desc: 'Heals 2% max HP/s',           apply: null },
+  { id: 'enraged',   label: 'Enraged',     icon: '😤', desc: '1.5× HP but 1.3× loot',       apply: null },
+  { id: 'splitting', label: 'Splitting',   icon: '🧬', desc: 'Spawns a half-HP copy on kill', apply: null },
+  { id: 'phasing',   label: 'Phasing',     icon: '👻', desc: 'Magic damage halved',          apply: null },
+  { id: 'shielded',  label: 'Shielded',    icon: '🔰', desc: 'First 20% HP is immune',       apply: null },
+];
+
+const DUNGEON_LOOT_TABLE = [
+  { type: 'gold',   weight: 40, label: 'Gold',        roll: tier => Math.round(8 + tier * 6) },
+  { type: 'stone',  weight: 15, label: 'Luck Stone',  roll: () => 1 },
+  { type: 'gem',    weight: 12, label: 'Gems',         roll: tier => 1 + Math.floor(tier / 3) },
+  { type: 'buff',   weight: 18, label: 'Board Buff',  roll: () => ['dmg', 'speed', 'gold'][Math.floor(Math.random() * 3)] },
+  { type: 'summon', weight: 8,  label: 'Free Summon',  roll: () => 1 },
+  { type: 'token',  weight: 7,  label: 'Tokens',       roll: tier => 1 + Math.floor(tier / 5) },
+];
+
+function rollDungeonLoot(tier) {
+  const totalWeight = DUNGEON_LOOT_TABLE.reduce((s, e) => s + e.weight, 0);
+  let r = Math.random() * totalWeight;
+  for (const entry of DUNGEON_LOOT_TABLE) {
+    r -= entry.weight;
+    if (r <= 0) return { type: entry.type, label: entry.label, amount: entry.roll(tier) };
+  }
+  return { type: 'gold', label: 'Gold', amount: 10 };
+}
+
+function applyDungeonLoot(loot) {
+  switch (loot.type) {
+    case 'gold':   game.gold += loot.amount; break;
+    case 'stone':  game.stones += loot.amount; break;
+    case 'gem':    game.gems = (game.gems || 0) + loot.amount; break;
+    case 'token':  game.tokens = (game.tokens || 0) + loot.amount; break;
+    case 'summon': game.gold += game.summonCost; break;
+    case 'buff':
+      if (loot.amount === 'dmg')   game.dungeon.boardBuff = { type: 'dmg',   mult: 1.15, timer: 20 };
+      if (loot.amount === 'speed') game.dungeon.boardBuff = { type: 'speed', mult: 1.20, timer: 20 };
+      if (loot.amount === 'gold')  game.dungeon.boardBuff = { type: 'gold',  mult: 1.30, timer: 20 };
+      break;
+  }
+}
+
+function rollBossModifiers(tier) {
+  if (tier < 3) return [];
+  const count = tier < 6 ? 1 : tier < 10 ? 2 : 3;
+  const pool = [...DUNGEON_MODIFIERS];
+  const picked = [];
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picked.push(pool.splice(idx, 1)[0]);
+  }
+  return picked;
+}
+
 function dungeonDps(unit) {
   const d = UNITS[unit.id];
-  // Sniper line is the dedicated farmer (steady ranged damage).
   const familyMult = d.family === 'sniper' ? 0.28 : 0.18;
-  return unitDamage(unit) * d.aps * familyMult;
+  let dps = unitDamage(unit) * d.aps * familyMult;
+  const mods = game.dungeon.boss.modifiers || [];
+  if (mods.find(m => m.id === 'phasing') && d.type === 'magic') dps *= 0.5;
+  for (const mod of mods) {
+    if (mod.apply) dps = mod.apply(dps);
+  }
+  return dps;
+}
+
+function dungeonLootGold(tier) {
+  let total = 0;
+  for (const u of game.dungeon.units) {
+    const d = UNITS[u.id];
+    if (d.loot) total += d.loot * (2 + tier);
+  }
+  return total;
 }
 
 function dungeonRecruitable(unit) {
@@ -1787,6 +1861,7 @@ function dungeonRecruitable(unit) {
 function sendToDungeon() {
   const u = game.selectedUnit;
   if (!u || !dungeonRecruitable(u)) return;
+  if (game.dungeon.dive) { log('Cannot modify roster during a dive!', 'danger'); return; }
   const idx = game.units.indexOf(u);
   if (idx < 0) return;
   game.units.splice(idx, 1);
@@ -1798,6 +1873,7 @@ function sendToDungeon() {
 }
 
 function recallFromDungeon(unit) {
+  if (game.dungeon.dive) { log('Cannot recall during a dive!', 'danger'); return; }
   const idx = game.dungeon.units.indexOf(unit);
   if (idx < 0) return;
   const cell = findEmptyCell();
@@ -1812,26 +1888,143 @@ function recallFromDungeon(unit) {
   updateUI();
 }
 
+function startDungeonDive() {
+  if (game.dungeon.units.length === 0) { log('Assign units to the dungeon first!', 'danger'); return; }
+  if (game.dungeon.dive) return;
+  const boss = game.dungeon.boss;
+  game.dungeon.dive = {
+    timer: 30,
+    bonusDps: 0,
+    taps: 0,
+    phase: 'fight',
+    dodgeZone: null,
+    dodgeTimer: 0,
+    shieldTimer: 0,
+    enrageTimer: 15 + Math.random() * 10,
+    enraged: false,
+    startHp: boss.hp,
+  };
+  log('Dungeon Dive started! Tap the boss to deal bonus damage!', 'epic');
+  renderDungeon();
+}
+
+function tapDungeonBoss() {
+  const dive = game.dungeon.dive;
+  if (!dive) return;
+  dive.taps += 1;
+  const totalDps = game.dungeon.units.reduce((s, u) => s + dungeonDps(u), 0);
+  const tapDmg = totalDps * 0.5;
+  game.dungeon.boss.hp -= tapDmg;
+  dive.bonusDps += tapDmg;
+}
+
+function updateDungeonDive(dt) {
+  const dive = game.dungeon.dive;
+  if (!dive) return;
+  dive.timer -= dt;
+  if (dive.timer <= 0) {
+    const bossKilled = game.dungeon.boss.hp <= 0;
+    log(`Dive ended! ${dive.taps} taps, ${bossKilled ? 'boss slain!' : 'boss survived.'}`, bossKilled ? 'gold' : '');
+    game.dungeon.dive = null;
+    renderDungeon();
+    return;
+  }
+  dive.enrageTimer -= dt;
+  if (dive.enrageTimer <= 0 && !dive.enraged) {
+    dive.enraged = true;
+    const boss = game.dungeon.boss;
+    boss.hp = Math.min(boss.hp * 1.2, boss.maxHp);
+    log('Bug Hydra is ENRAGED!', 'danger');
+  }
+}
+
 function updateDungeon(dt) {
+  if (game.dungeon.boardBuff) {
+    game.dungeon.boardBuff.timer -= dt;
+    if (game.dungeon.boardBuff.timer <= 0) game.dungeon.boardBuff = null;
+  }
   if (game.dungeon.units.length === 0) return;
   let dps = 0;
   for (const u of game.dungeon.units) {
     dps += dungeonDps(u);
   }
-  game.dungeon.boss.hp -= dps * dt;
+  const mods = game.dungeon.boss.modifiers || [];
+  if (mods.find(m => m.id === 'regen')) {
+    game.dungeon.boss.hp = Math.min(game.dungeon.boss.maxHp,
+      game.dungeon.boss.hp + game.dungeon.boss.maxHp * 0.02 * dt);
+  }
+  const shielded = mods.find(m => m.id === 'shielded');
+  if (shielded && game.dungeon.boss.hp > game.dungeon.boss.maxHp * 0.8) {
+    // no damage in shield phase
+  } else {
+    game.dungeon.boss.hp -= dps * dt;
+  }
+
+  if (game.dungeon.dive) updateDungeonDive(dt);
+
   if (game.dungeon.boss.hp <= 0) {
     const tier = game.dungeon.boss.tier;
     game.dungeon.kills += 1;
-    log(`Dungeon boss T${tier} falls`, 'gold');
     completeMission('firstDungeon');
-    game.dungeon.boss.tier = tier + 1;
-    const newHp = DUNGEON_BASE_HP * Math.pow(1.65, tier);
-    game.dungeon.boss.hp = newHp;
-    game.dungeon.boss.maxHp = newHp;
+
+    const lootGold = dungeonLootGold(tier);
+    if (lootGold > 0) {
+      game.gold += lootGold;
+      log(`Loot! +${lootGold}g from dungeon units`, 'gold');
+    }
+
+    const enragedMod = mods.find(m => m.id === 'enraged');
+    const lootCount = (tier % 5 === 0 ? 2 : 1) + (enragedMod ? 1 : 0);
+    const loots = [];
+    for (let i = 0; i < lootCount; i++) {
+      const loot = rollDungeonLoot(tier);
+      applyDungeonLoot(loot);
+      loots.push(loot);
+    }
+
+    const lootStr = loots.map(l => {
+      if (l.type === 'buff') return `${l.label} (${l.amount})`;
+      if (l.type === 'summon') return 'Free Summon';
+      return `+${l.amount} ${l.label}`;
+    }).join(', ');
+    log(`Dungeon T${tier} cleared! Loot: ${lootStr}`, 'gold');
+    game.dungeon.lootLog.unshift({ tier, loots, lootGold });
+    if (game.dungeon.lootLog.length > 20) game.dungeon.lootLog.pop();
+
+    if (tier % 5 === 0) {
+      const milestoneGold = 20 * tier;
+      game.gold += milestoneGold;
+      game.stones += 2;
+      log(`Milestone T${tier}! Bonus: +${milestoneGold}g, +2 stones`, 'epic');
+    }
+
+    if (mods.find(m => m.id === 'splitting')) {
+      const splitHp = DUNGEON_BASE_HP * Math.pow(1.65, tier - 1) * 0.5;
+      game.dungeon.boss.hp = splitHp;
+      game.dungeon.boss.maxHp = splitHp;
+      game.dungeon.boss.tier = tier;
+      game.dungeon.boss.modifiers = [];
+      log('The Hydra splits! A weakened copy remains!', 'danger');
+    } else {
+      game.dungeon.boss.tier = tier + 1;
+      const newHp = DUNGEON_BASE_HP * Math.pow(1.65, tier);
+      game.dungeon.boss.hp = newHp;
+      game.dungeon.boss.maxHp = newHp;
+      game.dungeon.boss.modifiers = rollBossModifiers(tier + 1);
+    }
+
     game.stats.dungeonClears = (game.stats.dungeonClears || 0) + 1;
+    if (game.dungeon.boss.tier > (game.stats.dungeonBest || 0)) {
+      game.stats.dungeonBest = game.dungeon.boss.tier;
+    }
     if (game.stats.dungeonClears >= 10) unlock('dungeon10');
     if (game.dungeon.boss.tier >= 5) unlock('dungeon5');
+    if (game.dungeon.boss.tier >= 15) unlock('dungeonDeep');
+    if (game.dungeon.boss.tier >= 25) unlock('dungeonAbyss');
+
+    if (game.dungeon.dive) game.dungeon.dive = null;
     saveProgress();
+    renderDungeon();
   }
   renderDungeonStatus();
 }
@@ -4015,33 +4208,68 @@ function renderRecipes() {
 function renderDungeon() {
   const boss = game.dungeon.boss;
   const totalDps = game.dungeon.units.reduce((s, u) => s + dungeonDps(u), 0);
+  const lootGoldPreview = dungeonLootGold(boss.tier);
+  const mods = boss.modifiers || [];
+  const modsHtml = mods.length > 0
+    ? `<div class="boss-modifiers">${mods.map(m => `<span class="boss-mod" title="${m.desc}">${m.icon} ${m.label}</span>`).join('')}</div>`
+    : '';
+  const dive = game.dungeon.dive;
+  const diveHtml = dive
+    ? `<div class="dive-active">
+        <div class="dive-timer">Dive: ${Math.ceil(dive.timer)}s${dive.enraged ? ' · ENRAGED' : ''}</div>
+        <div class="dive-taps">Taps: ${dive.taps}</div>
+        <button id="dive-tap-btn" class="dive-tap-btn" type="button">TAP!</button>
+       </div>`
+    : (game.dungeon.units.length > 0
+        ? `<button id="dive-start-btn" class="dive-start-btn" type="button">Dive In (30s active combat)</button>`
+        : '');
+  const bestTier = game.stats.dungeonBest || 0;
   const unitsHtml = game.dungeon.units.length === 0
     ? `<p class="hint">No guardians assigned. Open the inspector for an eligible unit (Rare or higher) and tap <b>Send to Dungeon</b>.</p>`
     : `<ul class="dungeon-units">${game.dungeon.units.map((u, i) => {
         const d = UNITS[u.id];
+        const lootTag = d.loot ? ` · +${d.loot * (2 + boss.tier)}g loot` : '';
         return `<li>
           <span class="glyph" style="border-color:${RARITY_COLORS[d.rarity]}">${unitIconImg(d.id, 'dungeon-icon', 30)}</span>
           <span class="name">${d.name}</span>
-          <span class="dps">${dungeonDps(u).toFixed(1)} dps</span>
+          <span class="dps">${dungeonDps(u).toFixed(1)} dps${lootTag}</span>
           <button data-recall="${i}" class="recall-btn" type="button">Recall</button>
         </li>`;
       }).join('')}</ul>`;
+  const lootLogHtml = (game.dungeon.lootLog || []).length > 0
+    ? `<details class="loot-log"><summary>Recent Loot</summary><ul>${game.dungeon.lootLog.slice(0, 8).map(e =>
+        `<li>T${e.tier}: ${e.loots.map(l => l.type === 'buff' ? `${l.label} (${l.amount})` : l.type === 'summon' ? 'Free Summon' : `+${l.amount} ${l.label}`).join(', ')}${e.lootGold > 0 ? ` +${e.lootGold}g loot` : ''}</li>`
+      ).join('')}</ul></details>`
+    : '';
+  const buffHtml = game.dungeon.boardBuff
+    ? `<div class="dungeon-buff">Board Buff: ${game.dungeon.boardBuff.type === 'dmg' ? '+15% DMG' : game.dungeon.boardBuff.type === 'speed' ? '+20% ATK SPD' : '+30% Gold'} (${Math.ceil(game.dungeon.boardBuff.timer)}s)</div>`
+    : '';
+  const nextMilestone = Math.ceil(boss.tier / 5) * 5;
   ui.dungeonBody.innerHTML = `
     <div class="dungeon-boss">
       <div class="boss-row">
-        <span class="boss-glyph">🐉</span>
+        <span class="boss-glyph" id="boss-tap-target">🐉</span>
         <div class="boss-meta">
           <div class="boss-name">Bug Hydra · Tier ${boss.tier}</div>
           <div class="boss-hp-row"><span id="dungeon-hp-text">${Math.max(0, Math.ceil(boss.hp))} / ${Math.ceil(boss.maxHp)}</span></div>
         </div>
       </div>
+      ${modsHtml}
       <div class="boss-hp-bar"><div id="dungeon-hp-fill" style="width:${Math.max(0, boss.hp / boss.maxHp) * 100}%"></div></div>
       <div class="dungeon-stats">
         <span>${totalDps.toFixed(1)} total DPS</span>
         <span>Cleared: ${game.dungeon.kills}</span>
+        <span>Best: T${bestTier}</span>
       </div>
+      <div class="dungeon-stats">
+        ${lootGoldPreview > 0 ? `<span>Loot/kill: +${lootGoldPreview}g</span>` : ''}
+        <span>Next milestone: T${nextMilestone}</span>
+      </div>
+      ${buffHtml}
+      ${diveHtml}
     </div>
     ${unitsHtml}
+    ${lootLogHtml}
   `;
   ui.dungeonBody.querySelectorAll('[data-recall]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -4050,6 +4278,13 @@ function renderDungeon() {
       if (u) recallFromDungeon(u);
     });
   });
+  const diveStartBtn = document.getElementById('dive-start-btn');
+  if (diveStartBtn) diveStartBtn.addEventListener('click', startDungeonDive);
+  const diveTapBtn = document.getElementById('dive-tap-btn');
+  if (diveTapBtn) diveTapBtn.addEventListener('click', tapDungeonBoss);
+  const bossTap = document.getElementById('boss-tap-target');
+  if (bossTap && dive) bossTap.addEventListener('click', tapDungeonBoss);
+
   const open = game.dungeon.units.length;
   ui.dungeonChip.textContent = open;
   ui.dungeonChip.classList.toggle('empty', open === 0);
@@ -4062,6 +4297,13 @@ function renderDungeonStatus() {
   const fill = document.getElementById('dungeon-hp-fill');
   if (txt) txt.textContent = `${Math.max(0, Math.ceil(boss.hp))} / ${Math.ceil(boss.maxHp)}`;
   if (fill) fill.style.width = `${Math.max(0, boss.hp / boss.maxHp) * 100}%`;
+  const dive = game.dungeon.dive;
+  if (dive) {
+    const timerEl = ui.dungeonBody.querySelector('.dive-timer');
+    const tapsEl = ui.dungeonBody.querySelector('.dive-taps');
+    if (timerEl) timerEl.textContent = `Dive: ${Math.ceil(dive.timer)}s${dive.enraged ? ' · ENRAGED' : ''}`;
+    if (tapsEl) tapsEl.textContent = `Taps: ${dive.taps}`;
+  }
 }
 
 function renderArtifacts(targetId = 'artifacts-body') {
@@ -4210,6 +4452,9 @@ function renderMode() {
     let stats = '';
     if (id === 'endless' && game.stats.endlessBest > 0) {
       stats = `<span class="mode-stats">Best: Wave ${game.stats.endlessBest}</span>`;
+    }
+    if (id === 'campaign' && (game.stats.dungeonBest || 0) > 0) {
+      stats = `<span class="mode-stats">Dungeon Best: Tier ${game.stats.dungeonBest}</span>`;
     }
     return `<button class="mode-card ${active ? 'active' : ''}" type="button" data-mode="${id}" style="--mode-color:${m.color}" ${active ? 'aria-pressed="true"' : ''}>
       <span class="mode-glyph">${m.glyph}</span>
@@ -4467,7 +4712,7 @@ function resetAllProgress() {
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
   game.artifacts = { sb: 0, mg: 0 };
   game.achievements = {};
-  game.stats = { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, unitLevels: {}, endlessBest: 0 };
+  game.stats = { kills: 0, stuns: 0, golemKills: 0, dungeonClears: 0, unitLevels: {}, endlessBest: 0, dungeonBest: 0 };
   game.difficulty = 'normal';
   game.mode = 'campaign';
   refreshWelcome();
@@ -4489,6 +4734,7 @@ function init() {
     if (saved.stats)        game.stats        = Object.assign(game.stats, saved.stats);
     if (!game.stats.unitLevels) game.stats.unitLevels = {};
     if (typeof game.stats.endlessBest !== 'number') game.stats.endlessBest = 0;
+    if (typeof game.stats.dungeonBest !== 'number') game.stats.dungeonBest = 0;
     if (saved.difficulty && DIFFICULTIES[saved.difficulty]) game.difficulty = saved.difficulty;
     if (saved.mapId && MAPS[saved.mapId]) game.mapId = saved.mapId;
     if (saved.mode && MODES[saved.mode]) game.mode = saved.mode;
