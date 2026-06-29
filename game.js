@@ -1988,6 +1988,7 @@ function updateDungeon(dt) {
       return `+${l.amount} ${l.label}`;
     }).join(', ');
     log(`Dungeon T${tier} cleared! Loot: ${lootStr}`, 'gold');
+    if (!game.dungeon.lootLog) game.dungeon.lootLog = [];
     game.dungeon.lootLog.unshift({ tier, loots, lootGold });
     if (game.dungeon.lootLog.length > 20) game.dungeon.lootLog.pop();
 
@@ -4595,7 +4596,7 @@ function restart() {
   game.coop.summonTimer = 0;
   game.coop.mergeTimer = 0;
   game.golem = { cooldown: GOLEM_COOLDOWN, active: false, kills: 0 };
-  game.dungeon = { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1 }, kills: 0 };
+  game.dungeon = { units: [], boss: { hp: DUNGEON_BASE_HP, maxHp: DUNGEON_BASE_HP, tier: 1, modifiers: [] }, kills: 0, dive: null, lootLog: [], boardBuff: null };
   game.particles = [];
   game.rings = [];
   game.shake = { time: 0, intensity: 0 };
