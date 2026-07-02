@@ -1918,15 +1918,20 @@ function tapDungeonBoss() {
   dive.bonusDps += tapDmg;
 }
 
+function endDungeonDive(reason) {
+  const dive = game.dungeon.dive;
+  if (!dive) return;
+  log(`Dive ended! ${dive.taps} taps — ${reason}`, reason === 'boss slain!' ? 'gold' : '');
+  game.dungeon.dive = null;
+}
+
 function updateDungeonDive(dt) {
   const dive = game.dungeon.dive;
   if (!dive) return;
+  if (game.dungeon.boss.hp <= 0) { endDungeonDive('boss slain!'); return; }
   dive.timer -= dt;
   if (dive.timer <= 0) {
-    const bossKilled = game.dungeon.boss.hp <= 0;
-    log(`Dive ended! ${dive.taps} taps, ${bossKilled ? 'boss slain!' : 'boss survived.'}`, bossKilled ? 'gold' : '');
-    game.dungeon.dive = null;
-    renderDungeon();
+    endDungeonDive(game.dungeon.boss.hp <= 0 ? 'boss slain!' : 'time up');
     return;
   }
   dive.enrageTimer -= dt;
@@ -1960,9 +1965,9 @@ function updateDungeon(dt) {
     game.dungeon.boss.hp -= dps * dt;
   }
 
-  if (game.dungeon.dive) updateDungeonDive(dt);
-
   if (game.dungeon.boss.hp <= 0) {
+    if (game.dungeon.dive) endDungeonDive('boss slain!');
+
     const tier = game.dungeon.boss.tier;
     game.dungeon.kills += 1;
     completeMission('firstDungeon');
@@ -2022,9 +2027,10 @@ function updateDungeon(dt) {
     if (game.dungeon.boss.tier >= 15) unlock('dungeonDeep');
     if (game.dungeon.boss.tier >= 25) unlock('dungeonAbyss');
 
-    if (game.dungeon.dive) game.dungeon.dive = null;
     saveProgress();
     renderDungeon();
+  } else if (game.dungeon.dive) {
+    updateDungeonDive(dt);
   }
   renderDungeonStatus();
 }
